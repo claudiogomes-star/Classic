@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Error</title>
+</head>
+<body>
+  <h1>Testando Erros JavaScript</h1>
+  <div id="errors" style="color: red; font-family: monospace; white-space: pre;"></div>
+  
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      document.getElementById('errors').textContent += 
+        `ERRO: ${msg}\nArquivo: ${url}\nLinha: ${lineNo}\nColuna: ${columnNo}\n\n`;
+      return false;
+    };
+  </script>
+  
+  <script src="js/audio.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/game.js"></script>
+  
+  <script>
+    setTimeout(() => {
+      if (document.getElementById('errors').textContent === '') {
+        document.getElementById('errors').style.color = 'green';
+        document.getElementById('errors').textContent = 'TODOS OS ARQUIVOS CARREGARAM SEM ERROS!';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

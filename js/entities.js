@@ -46,17 +46,25 @@ class Player {
     this.shootRecoil = false;
     this.shootFlashTimer = 0;
     this.meleeTimer = 0;
+    this.meleeComboStep = 0;
+    this.meleeAttackTime = 0; // Tempo de animação do ataque
+    this.isAttacking = false; // Flag de ataque ativo
+    this.isSpinning = false; // Flag de spin 360°
+    this.spinAngle = 0; // Ângulo do spin atual
+    this.attackDirection = 'vertical'; // 'vertical' ou 'horizontal'
+    this.isExecuting = false; // Flag de execução aérea
+    this.executionPhase = 0; // 0=subindo, 1=no topo, 2=descendo
 
     // Aplicar Especialidades por Personagem
     if (this.characterId === 'claudio') {
-      // Claudio: Strike Master & Wielder of the Nordic Axe
-      this.speed = 4.8;
+      // Claudio: Nordic Warrior & Wielder of the Leviathan Axe
+      this.speed = 5.2; // Mais rápido e ágil
       this.grenades = 15;
-      this.meleeDamage = 110;
-      this.meleeRange = 50;
+      this.meleeDamage = 180; // Dano ÉPICO aumentado
+      this.meleeRange = 70; // Alcance ainda maior
       this.hasWarPaint = true;
-      this.weapon = 'AXE'; // Claudio inicia empunhando o Machado Nórdico Dourado e Preto!
-      this.ammo = 100;
+      this.weapon = 'AXE'; // Claudio empunha o Machado Nórdico!
+      this.ammo = Infinity; // Machado não gasta munição
     } else if (this.characterId === 'marco') {
       // Marco: Burst Fire (Maior cadência de tiro)
       this.speed = 4.2;
@@ -93,9 +101,11 @@ class Player {
     }
 
     // --- VERIFICAÇÃO DE QUEDA FATAL EM BURACO / ABISMO ---
-    if (this.y > game.canvas.height + 35 && !this.isDead) {
+    // Dar mais margem - só morre se cair BEM longe da tela
+    const abyssLevel = game.canvas.height + 120; // Aumentado de 40 para 120
+    if (this.y > abyssLevel && !this.isDead) {
       audio.playPitFall();
-      game.addFloatingText(this.x, game.canvas.height - 40, 'FALLEN INTO THE ABYSS!', '#ff2222', 13);
+      game.addFloatingText(this.x, game.canvas.height - 60, 'CAIU NO ABISMO!', '#ff2222', 13);
       this.die(game);
       return;
     }
@@ -111,6 +121,21 @@ class Player {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.shootFlashTimer > 0) this.shootFlashTimer -= dt;
     if (this.meleeTimer > 0) this.meleeTimer -= dt;
+    if (this.meleeAttackTime > 0) {
+      this.meleeAttackTime -= dt;
+      if (this.meleeAttackTime <= 0) {
+        this.isAttacking = false;
+      }
+    }
+
+    // Atualizar spin 360°
+    if (this.isSpinning) {
+      this.spinAngle += dt * 18; // Velocidade de rotação
+      if (this.spinAngle >= Math.PI * 2) {
+        this.isSpinning = false;
+        this.spinAngle = 0;
+      }
+    }
 
     if (this.isInvulnerable) {
       this.invulnerableTimer -= dt;
@@ -118,15 +143,33 @@ class Player {
     }
 
     // --- ENTRADA DE MOVIMENTO (1P ou 2P) ---
-    const prefix = (this.playerIndex === 1) ? 'p2_' : '';
-    const moveLeft = input.isDown(prefix + 'left');
-    const moveRight = input.isDown(prefix + 'right');
-    const lookUp = input.isDown(prefix + 'up');
-    const lookDown = input.isDown(prefix + 'down');
-    const jumpPressed = input.isPressed(prefix + 'jump');
-    const shootPressed = input.isDown(prefix + 'shoot');
-    const bombPressed = input.isPressed(prefix + 'bomb');
-    const enterPressed = input.isPressed(prefix + 'enter');
+    // Player 1 (índice 0): WASD + J/K/L/E
+    // Player 2 (índice 1): Arrows + U/I/O/P ou NumPad1/2/3/0
+    let moveLeft, moveRight, lookUp, lookDown, jumpPressed, shootPressed, bombPressed, enterPressed, executionPressed;
+    
+    if (this.playerIndex === 0) {
+      // Jogador 1
+      moveLeft = input.isDown('left');
+      moveRight = input.isDown('right');
+      lookUp = input.isDown('up');
+      lookDown = input.isDown('down');
+      jumpPressed = input.isPressed('jump');
+      shootPressed = input.isDown('shoot');
+      bombPressed = input.isPressed('bomb');
+      enterPressed = input.isPressed('enter');
+      executionPressed = input.isPressed('execution');
+    } else {
+      // Jogador 2
+      moveLeft = input.keys['ArrowLeft'];
+      moveRight = input.keys['ArrowRight'];
+      lookUp = input.keys['ArrowUp'];
+      lookDown = input.keys['ArrowDown'];
+      jumpPressed = input.pressed['KeyU'] || input.pressed['Numpad1'];
+      shootPressed = input.keys['KeyI'] || input.keys['Numpad2'];
+      bombPressed = input.pressed['KeyO'] || input.pressed['Numpad3'];
+      enterPressed = input.pressed['KeyP'] || input.pressed['Numpad0'];
+      executionPressed = false; // P2 não tem execução ainda
+    }
 
     // Agachamento
     this.isCrouching = lookDown && this.onGround;
@@ -172,12 +215,30 @@ class Player {
 
     // Ação: Atirar ou Desferir Machado
     if (shootPressed) {
-      this.tryShoot(game);
+      // Se tiver o Machado Nórdico, só ataca corpo a corpo
+      if (this.weapon === 'AXE') {
+        // Alternar entre ataque vertical e horizontal
+        if (lookDown) {
+          // Segurando S = Ataque VERTICAL (de cima pra baixo)
+          this.attackDirection = 'vertical';
+        } else {
+          // Normal = Ataque HORIZONTAL (esquerda pra direita)
+          this.attackDirection = 'horizontal';
+        }
+        this.tryAxeMeleeAttack(game);
+      } else {
+        this.tryShoot(game);
+      }
     }
 
-    // Ação: Lançar Granada
-    if (bombPressed && this.grenades > 0) {
-      this.throwGrenade(game);
+    // Ação: Lançar Granada OU SPIN ATTACK 360° (se tiver machado)
+    if (bombPressed) {
+      if (this.weapon === 'AXE' && this.grenades > 0) {
+        // ATAQUE ESPECIAL 360° GIRANDO O PERSONAGEM INTEIRO!
+        this.tryAxeSpinAttack(game);
+      } else if (this.grenades > 0) {
+        this.throwGrenade(game);
+      }
     }
 
     // Ação: Entrar no Cyber Slug
@@ -185,20 +246,504 @@ class Player {
       this.tryEnterSlug(game);
     }
 
-    // Checar Ataque Corpo a Corpo se houver inimigo colado
-    this.checkMeleeAttack(game);
+    // Ação: EXECUÇÃO AÉREA - Pular e dividir inimigo (tecla R)
+    if (executionPressed) {
+      if (this.weapon === 'AXE' && this.onGround && !this.inSlug) {
+        this.tryAxeExecutionJump(game);
+      }
+    }
+  }
+
+  // === ATAQUE DO MACHADO NÓRDICO (VERTICAL OU HORIZONTAL) ===
+  tryAxeMeleeAttack(game) {
+    if (this.meleeTimer > 0) return;
+
+    // ATIVAR MODO DE ATAQUE
+    this.isAttacking = true;
+    this.meleeAttackTime = 0.4;
+    
+    const attackRange = this.meleeRange || 70;
+    const hitEnemies = [];
+    const dashDistance = 12;
+    this.x += this.facing * dashDistance;
+
+    // Buscar inimigos em alcance
+    game.enemies.forEach(e => {
+      const dist = Math.hypot((e.x + e.width / 2) - (this.x + this.width / 2), (e.y + e.height / 2) - (this.y + this.height / 2));
+      const angle = Math.atan2((e.y + e.height / 2) - (this.y + this.height / 2), (e.x + e.width / 2) - (this.x + this.width / 2));
+      const facingAngle = this.facing === 1 ? 0 : Math.PI;
+      const angleDiff = Math.abs(angle - facingAngle);
+      
+      if (dist < attackRange && angleDiff < Math.PI / 2 && Math.abs(e.y - this.y) < 60) {
+        hitEnemies.push(e);
+      }
+    });
+
+    if (game.boss && !game.boss.isDead) {
+      const bDist = Math.hypot((game.boss.x + game.boss.width / 2) - (this.x + this.width / 2), (game.boss.y + game.boss.height / 2) - (this.y + this.height / 2));
+      if (bDist < attackRange + 90) {
+        hitEnemies.push(game.boss);
+      }
+    }
+
+    if (hitEnemies.length > 0) {
+      this.meleeTimer = 0.28;
+      this.meleeComboStep = (this.meleeComboStep + 1) % 3;
+
+      if (this.meleeComboStep === 0) {
+        audio.playAxeSwing();
+      } else if (this.meleeComboStep === 1) {
+        audio.playAxeHit();
+      } else {
+        audio.playAxeSwing();
+        setTimeout(() => audio.playExplosion(false), 120);
+      }
+      
+      const shakeIntensity = 7 + this.meleeComboStep * 2;
+      game.triggerScreenShake(shakeIntensity, 0.2);
+
+      hitEnemies.forEach(enemy => {
+        const baseDamage = this.meleeDamage || 180;
+        const comboDamage = baseDamage * (1 + this.meleeComboStep * 0.35);
+        
+        if (enemy.takeDamage) {
+          enemy.takeDamage(comboDamage, Math.atan2(0, this.facing), game);
+        }
+        
+        // Efeitos diferentes por direção de ataque
+        if (this.attackDirection === 'vertical') {
+          // VERTICAL: Impacto no chão
+          game.spawnSpark(enemy.x + enemy.width / 2, enemy.y + enemy.height);
+          
+          for (let i = 0; i < 15; i++) {
+            const angle = Math.PI / 2 + (Math.random() - 0.5) * Math.PI / 3;
+            game.particles.push({
+              type: 'blood',
+              x: enemy.x + enemy.width / 2,
+              y: enemy.y + enemy.height,
+              vx: Math.cos(angle) * (3 + Math.random() * 8),
+              vy: Math.sin(angle) * (-8 - Math.random() * 6),
+              radius: 3 + Math.random() * 2,
+              life: 0.7,
+              maxLife: 0.7,
+              color: this.meleeComboStep === 2 ? '#ff1a1a' : '#ffd700'
+            });
+          }
+
+          if (enemy.vx !== undefined) {
+            enemy.vx = this.facing * 10;
+            enemy.vy = -8;
+          }
+        } else {
+          // HORIZONTAL: Corte lateral
+          game.spawnSpark(enemy.x + (this.facing === 1 ? enemy.width : 0), enemy.y + enemy.height / 2);
+          
+          for (let i = 0; i < 15; i++) {
+            const angle = this.facing === 1 ? 0 : Math.PI;
+            const spread = (Math.random() - 0.5) * Math.PI / 4;
+            game.particles.push({
+              type: 'blood',
+              x: enemy.x + enemy.width / 2,
+              y: enemy.y + enemy.height / 2,
+              vx: Math.cos(angle + spread) * (8 + Math.random() * 6),
+              vy: Math.sin(spread) * (4 + Math.random() * 4),
+              radius: 3 + Math.random() * 2,
+              life: 0.7,
+              maxLife: 0.7,
+              color: this.meleeComboStep === 2 ? '#ff3300' : '#ffd700'
+            });
+          }
+
+          if (enemy.vx !== undefined) {
+            enemy.vx = this.facing * 14;
+            enemy.vy = -4;
+          }
+        }
+      });
+
+      // Textos por direção
+      const verticalTexts = ['⚡ SLAM!', '💥 ESMAGAR!', '🔥 EXECUÇÃO!'];
+      const horizontalTexts = ['⚔️ CORTE!', '💫 CLEAVE!', '⚡ DEVASTAR!'];
+      const comboColors = ['#ffcc00', '#ff6600', '#ff0000'];
+      const texts = this.attackDirection === 'vertical' ? verticalTexts : horizontalTexts;
+      
+      game.addFloatingText(
+        this.x, 
+        this.y - 30, 
+        texts[this.meleeComboStep] + ` ${Math.floor(this.meleeDamage * (1 + this.meleeComboStep * 0.35))}`, 
+        comboColors[this.meleeComboStep], 
+        14
+      );
+
+      // Ondas de choque
+      const impactX = this.x + this.width / 2 + (this.attackDirection === 'horizontal' ? this.facing * 35 : 0);
+      const impactY = this.attackDirection === 'vertical' ? this.y + this.height + 5 : this.y + this.height / 2;
+      
+      for (let i = 0; i < 20; i++) {
+        const angle = this.attackDirection === 'vertical' ? 
+          Math.PI / 2 + (Math.random() - 0.5) * Math.PI :
+          (this.facing === 1 ? 0 : Math.PI) + (Math.random() - 0.5) * Math.PI / 2;
+        
+        game.particles.push({
+          type: 'spark',
+          x: impactX + (Math.random() - 0.5) * 20,
+          y: impactY + (Math.random() - 0.5) * 20,
+          vx: Math.cos(angle) * (5 + Math.random() * 8),
+          vy: Math.sin(angle) * (5 + Math.random() * 8),
+          life: 0.5,
+          maxLife: 0.5
+        });
+      }
+
+      for (let i = 0; i < 8; i++) {
+        game.spawnSmoke(
+          impactX + (Math.random() - 0.5) * 50, 
+          impactY, 
+          10
+        );
+      }
+
+      return true;
+    }
+
+    // Swing no ar
+    if (this.meleeTimer <= 0) {
+      this.meleeTimer = 0.25;
+      audio.playAxeSwing();
+      
+      for (let i = 0; i < 5; i++) {
+        game.particles.push({
+          type: 'spark',
+          x: this.x + this.width / 2 + this.facing * 25,
+          y: this.y + (Math.random() - 0.5) * 20,
+          vx: this.facing * (3 + Math.random() * 4),
+          vy: (Math.random() - 0.5) * 6,
+          life: 0.2,
+          maxLife: 0.2
+        });
+      }
+      
+      game.addFloatingText(this.x, this.y - 10, '~whoosh~', '#888888', 8);
+      return false;
+    }
+
+    return false;
+  }
+
+  // === ATAQUE ESPECIAL 360° GIRANDO O MACHADO ===
+  tryAxeSpinAttack(game) {
+    if (this.meleeTimer > 0 || this.isSpinning) return;
+
+    // Consumir 1 granada para ativar o spin
+    this.grenades--;
+    
+    // Ativar modo SPIN 360°
+    this.isSpinning = true;
+    this.spinAngle = 0;
+    this.meleeTimer = 0.6; // Cooldown longo após spin
+    
+    // Som épico de spin
+    audio.playAxeSwing();
+    setTimeout(() => audio.playAxeHit(), 150);
+    setTimeout(() => audio.playExplosion(true), 300);
+    
+    // Screen shake contínuo
+    game.triggerScreenShake(10, 0.6);
+    
+    // Texto de ultimate
+    game.addFloatingText(this.x, this.y - 35, '⚔️ SPIN DEVASTADOR 360° ⚔️', '#ff3300', 15);
+    
+    // Dano contínuo durante toda a rotação
+    let hitCount = 0;
+    const spinDamage = (this.meleeDamage || 180) * 1.5; // 50% mais dano
+    
+    const spinInterval = setInterval(() => {
+      if (!this.isSpinning) {
+        clearInterval(spinInterval);
+        return;
+      }
+      
+      hitCount++;
+      
+      // Detectar inimigos em TODAS as direções (360°)
+      const spinRange = 85;
+      
+      game.enemies.forEach(e => {
+        const dist = Math.hypot((e.x + e.width / 2) - (this.x + this.width / 2), (e.y + e.height / 2) - (this.y + this.height / 2));
+        if (dist < spinRange) {
+          if (e.takeDamage) {
+            e.takeDamage(spinDamage / 4, Math.atan2(e.y - this.y, e.x - this.x), game);
+          }
+          
+          // Knockback radial
+          if (e.vx !== undefined) {
+            const angle = Math.atan2(e.y - this.y, e.x - this.x);
+            e.vx = Math.cos(angle) * 12;
+            e.vy = Math.sin(angle) * 12 - 4;
+          }
+        }
+      });
+      
+      // Boss também
+      if (game.boss && !game.boss.isDead) {
+        const bDist = Math.hypot((game.boss.x + game.boss.width / 2) - (this.x + this.width / 2), (game.boss.y + game.boss.height / 2) - (this.y + this.height / 2));
+        if (bDist < spinRange + 100) {
+          game.boss.takeDamage(spinDamage / 4, game);
+        }
+      }
+      
+      // Partículas circulares INTENSAS durante o spin
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+        const radius = 50 + Math.sin(this.spinAngle * 3) * 10;
+        game.particles.push({
+          type: 'spark',
+          x: this.x + this.width / 2 + Math.cos(a + this.spinAngle) * radius,
+          y: this.y + this.height / 2 + Math.sin(a + this.spinAngle) * radius,
+          vx: Math.cos(a + this.spinAngle) * 12,
+          vy: Math.sin(a + this.spinAngle) * 12,
+          life: 0.5,
+          maxLife: 0.5
+        });
+      }
+      
+      // Rastro dourado circular do machado
+      for (let i = 0; i < 3; i++) {
+        const angle = this.spinAngle + (Math.random() - 0.5) * 0.3;
+        game.particles.push({
+          type: 'spark',
+          x: this.x + this.width / 2 + Math.cos(angle) * 45,
+          y: this.y + this.height / 2 + Math.sin(angle) * 45,
+          vx: 0,
+          vy: 0,
+          life: 0.3,
+          maxLife: 0.3
+        });
+      }
+      
+    }, 80); // Tick de dano a cada 80ms
+    
+    return true;
+  }
+
+  // === EXECUÇÃO AÉREA DEVASTADORA - PULAR E DIVIDIR O INIMIGO AO MEIO ===
+  tryAxeExecutionJump(game) {
+    if (this.meleeTimer > 0 || this.isExecuting) return false;
+
+    // Procurar inimigo mais próximo na frente
+    const executionRange = 120;
+    let targetEnemy = null;
+    let minDist = executionRange;
+
+    game.enemies.forEach(e => {
+      const dx = (e.x + e.width / 2) - (this.x + this.width / 2);
+      const dist = Math.hypot(dx, (e.y + e.height / 2) - (this.y + this.height / 2));
+      
+      // Inimigo tem que estar na frente
+      if ((this.facing === 1 && dx > 0) || (this.facing === -1 && dx < 0)) {
+        if (dist < minDist) {
+          minDist = dist;
+          targetEnemy = e;
+        }
+      }
+    });
+
+    // Boss também pode ser executado
+    if (game.boss && !game.boss.isDead) {
+      const dx = (game.boss.x + game.boss.width / 2) - (this.x + this.width / 2);
+      const dist = Math.hypot(dx, (game.boss.y + game.boss.height / 2) - (this.y + this.height / 2));
+      if (dist < executionRange + 50 && ((this.facing === 1 && dx > 0) || (this.facing === -1 && dx < 0))) {
+        targetEnemy = game.boss;
+      }
+    }
+
+    if (!targetEnemy) {
+      game.addFloatingText(this.x, this.y - 15, 'Sem alvo!', '#888888', 10);
+      return false;
+    }
+
+    // ATIVAR MODO DE EXECUÇÃO!
+    this.isExecuting = true;
+    this.executionPhase = 0;
+    this.meleeTimer = 2.0; // Cooldown longo
+
+    // SOM ÉPICO DE PREPARAÇÃO
+    audio.playAxeSwing();
+    
+    // FASE 1: PULAR PARA CIMA
+    this.vy = -14; // Pulo alto
+    this.vx = this.facing * 3; // Movimento horizontal suave
+    
+    game.addFloatingText(this.x, this.y - 20, '⚡ EXECUÇÃO! ⚡', '#ff0000', 16);
+    game.triggerScreenShake(5, 0.3);
+
+    // Partículas de preparação
+    for (let i = 0; i < 20; i++) {
+      game.particles.push({
+        type: 'spark',
+        x: this.x + this.width / 2,
+        y: this.y + this.height,
+        vx: (Math.random() - 0.5) * 8,
+        vy: -Math.random() * 10,
+        life: 0.6,
+        maxLife: 0.6
+      });
+    }
+
+    // Controlar a execução em fases
+    let executionTimer = 0;
+    const executionInterval = setInterval(() => {
+      if (!this.isExecuting) {
+        clearInterval(executionInterval);
+        return;
+      }
+
+      executionTimer += 0.05;
+
+      // FASE 2: NO TOPO (0.3s depois)
+      if (executionTimer > 0.3 && this.executionPhase === 0) {
+        this.executionPhase = 1;
+        
+        // Travar no ar por um momento
+        this.vy = 0;
+        this.vx = 0;
+        
+        audio.playAxeHit();
+        
+        setTimeout(() => {
+          if (!this.isExecuting) return;
+          
+          // FASE 3: DESCER COM MACHADO!
+          this.executionPhase = 2;
+          this.vy = 18; // Descida RÁPIDA
+          
+          // Mirar no inimigo
+          const targetX = targetEnemy.x + targetEnemy.width / 2;
+          this.vx = (targetX - (this.x + this.width / 2)) * 0.3;
+          
+          audio.playAxeSwing();
+          
+          // Rastro vermelho ao descer
+          const trailInterval = setInterval(() => {
+            if (this.executionPhase !== 2 || !this.isExecuting) {
+              clearInterval(trailInterval);
+              return;
+            }
+            
+            for (let i = 0; i < 3; i++) {
+              game.particles.push({
+                type: 'blood',
+                x: this.x + this.width / 2,
+                y: this.y + this.height / 2 - 10,
+                vx: (Math.random() - 0.5) * 4,
+                vy: Math.random() * 3,
+                radius: 4,
+                life: 0.4,
+                maxLife: 0.4,
+                color: '#ff0000'
+              });
+            }
+          }, 50);
+          
+        }, 200);
+      }
+
+      // FASE 4: IMPACTO!
+      if (this.executionPhase === 2 && this.onGround) {
+        this.isExecuting = false;
+        this.executionPhase = 0;
+        clearInterval(executionInterval);
+        
+        // EXPLOSÃO MASSIVA!
+        audio.playExplosion(true);
+        game.triggerScreenShake(15, 0.5);
+        
+        // Verificar se acertou o inimigo
+        const impactDist = Math.hypot((targetEnemy.x + targetEnemy.width / 2) - (this.x + this.width / 2), (targetEnemy.y + targetEnemy.height / 2) - (this.y + this.height / 2));
+        
+        if (impactDist < 100) {
+          // ACERTOU! DIVIDIR O INIMIGO AO MEIO!
+          const executionDamage = (this.meleeDamage || 180) * 3; // TRIPLO DE DANO!
+          
+          if (targetEnemy.takeDamage) {
+            targetEnemy.takeDamage(executionDamage, Math.atan2(0, this.facing), game);
+          }
+          
+          // EFEITO VISUAL DE DIVISÃO AO MEIO
+          const centerX = targetEnemy.x + targetEnemy.width / 2;
+          const centerY = targetEnemy.y + targetEnemy.height / 2;
+          
+          // Linha de corte vertical brilhante
+          for (let y = -30; y <= 30; y += 3) {
+            game.particles.push({
+              type: 'spark',
+              x: centerX,
+              y: centerY + y,
+              vx: 0,
+              vy: 0,
+              life: 0.3,
+              maxLife: 0.3
+            });
+          }
+          
+          // Explosão de sangue dos dois lados
+          for (let i = 0; i < 30; i++) {
+            const side = i < 15 ? -1 : 1;
+            game.particles.push({
+              type: 'blood',
+              x: centerX,
+              y: centerY + (Math.random() - 0.5) * targetEnemy.height,
+              vx: side * (5 + Math.random() * 10),
+              vy: -5 - Math.random() * 8,
+              radius: 4 + Math.random() * 3,
+              life: 0.8,
+              maxLife: 0.8,
+              color: '#cc0000'
+            });
+          }
+          
+          game.addFloatingText(centerX, centerY - 40, `💀 EXECUTADO! ${executionDamage} 💀`, '#ff0000', 18);
+          
+        } else {
+          // Errou - apenas impacto no chão
+          game.addFloatingText(this.x, this.y - 20, 'ERROU!', '#888888', 12);
+        }
+        
+        // Onda de choque no chão
+        const impactX = this.x + this.width / 2;
+        const impactY = this.y + this.height;
+        
+        game.spawnExplosion(impactX, impactY, 60);
+        
+        for (let i = 0; i < 40; i++) {
+          const angle = (Math.random() * Math.PI) - Math.PI / 2;
+          game.particles.push({
+            type: 'spark',
+            x: impactX,
+            y: impactY,
+            vx: Math.cos(angle) * (8 + Math.random() * 12),
+            vy: Math.sin(angle) * (8 + Math.random() * 12),
+            life: 0.6,
+            maxLife: 0.6
+          });
+        }
+        
+        // Rachadura no chão
+        for (let i = 0; i < 15; i++) {
+          game.spawnSmoke(impactX + (Math.random() - 0.5) * 80, impactY, 12);
+        }
+      }
+      
+    }, 50);
+
+    return true;
   }
 
   tryShoot(game) {
     if (this.shootCooldown > 0) return;
 
-    // Verificar se há inimigo corpo a corpo antes de disparar
-    if (this.checkMeleeAttack(game)) return;
-
     // Definir cadência por arma
     let fireDelay = 0.18;
     switch (this.weapon) {
-      case 'AXE': fireDelay = 0.22; break; // Machado Nórdico: balanço potente
       case 'HMG': fireDelay = 0.08; break;
       case 'SHOTGUN': fireDelay = 0.45; break;
       case 'ROCKET': fireDelay = 0.35; break;
@@ -261,15 +806,6 @@ class Player {
     const speed = 14;
 
     switch (this.weapon) {
-      case 'AXE':
-        // Machado Nórdico: Onda de Choque Dourada e Corte em Arco
-        audio.playAxeSwing();
-        this.meleeTimer = 0.3;
-        this.hasWarPaint = true;
-        game.projectiles.push(new Projectile(sx, sy, dx * 16, dy * 16, 'axe_wave', 135, true, 16, 0.7));
-        game.triggerScreenShake(3, 0.08);
-        break;
-
       case 'HMG':
         audio.playShootHMG();
         const spreadAngle = (Math.random() - 0.5) * 0.08;
@@ -331,7 +867,10 @@ class Player {
   }
 
   checkMeleeAttack(game) {
-    const meleeRange = this.weapon === 'AXE' ? 60 : (this.meleeRange || 40);
+    // Ataques corpo a corpo para personagens sem machado
+    if (this.weapon === 'AXE') return false; // Claudio usa o sistema especial de machado
+
+    const meleeRange = this.meleeRange || 40;
     const nearbyEnemy = game.enemies.find(e => {
       const dist = Math.hypot((e.x + e.width / 2) - (this.x + this.width / 2), (e.y + e.height / 2) - (this.y + this.height / 2));
       return dist < meleeRange && Math.abs(e.y - this.y) < 35;
@@ -339,21 +878,13 @@ class Player {
 
     if (nearbyEnemy && this.meleeTimer <= 0) {
       this.meleeTimer = 0.3;
-      if (this.weapon === 'AXE') {
-        audio.playAxeHit();
-        nearbyEnemy.takeDamage(240, Math.atan2(0, this.facing), game);
-        game.addFloatingText(nearbyEnemy.x, nearbyEnemy.y - 15, 'AXE CLEAVE! 240 DMG', '#ffcc00', 13);
-        game.triggerScreenShake(5, 0.12);
-        game.spawnSpark(nearbyEnemy.x + nearbyEnemy.width / 2, nearbyEnemy.y + nearbyEnemy.height / 2);
-      } else {
-        audio.playMeleeSlash();
-        const dmg = this.meleeDamage || 75;
-        nearbyEnemy.takeDamage(dmg, Math.atan2(0, this.facing), game);
-        const slashText = this.characterId === 'claudio' ? 'CRITICAL SLASH!' : 'SLASH!';
-        const slashColor = this.characterId === 'claudio' ? '#00ffcc' : '#00d9ff';
-        game.addFloatingText(nearbyEnemy.x, nearbyEnemy.y - 10, slashText, slashColor);
-        game.triggerScreenShake(3, 0.08);
-      }
+      audio.playMeleeSlash();
+      const dmg = this.meleeDamage || 75;
+      nearbyEnemy.takeDamage(dmg, Math.atan2(0, this.facing), game);
+      const slashText = 'SLASH!';
+      const slashColor = '#00d9ff';
+      game.addFloatingText(nearbyEnemy.x, nearbyEnemy.y - 10, slashText, slashColor);
+      game.triggerScreenShake(3, 0.08);
       return true;
     }
     return false;
@@ -431,12 +962,13 @@ class Player {
   die(game) {
     this.isDead = true;
     this.lives--;
-    this.respawnTimer = 2.0;
+    this.respawnTimer = 2.5;
     game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 40);
     audio.playExplosion(false);
 
     if (this.lives < 0) {
-      game.checkGameOver();
+      // Verificar se todos os jogadores morreram
+      game.checkAllPlayersDead();
     }
   }
 
@@ -446,7 +978,7 @@ class Player {
     
     if (this.characterId === 'claudio') {
       this.weapon = 'AXE';
-      this.ammo = 80;
+      this.ammo = Infinity; // Machado não usa munição
       this.hasWarPaint = true;
     } else if (this.characterId === 'fio') {
       this.weapon = 'HMG';
@@ -466,17 +998,26 @@ class Player {
   }
 
   equipWeapon(type, ammoCount, game) {
+    // Claudio NÃO pode trocar o Machado Nórdico por outras armas!
+    if (this.characterId === 'claudio' && type !== 'AXE') {
+      game.addFloatingText(this.x, this.y - 20, 'MACHADO ETERNO!', '#ffcc00', 11);
+      audio.announce("LEVIATHAN AXE CANNOT BE REPLACED");
+      return;
+    }
+
     this.weapon = type;
     if (type === 'AXE') {
       this.hasWarPaint = true;
+      this.ammo = Infinity;
+    } else {
+      const finalAmmo = Math.round(ammoCount * (this.pickupMultiplier || 1.0));
+      this.ammo = finalAmmo;
     }
-    const finalAmmo = Math.round(ammoCount * (this.pickupMultiplier || 1.0));
-    this.ammo = finalAmmo;
     this.score += 500;
 
     let announceName = "OK!";
     switch (type) {
-      case 'AXE': announceName = "NORDIC BATTLE AXE"; audio.playAxeHit(); break;
+      case 'AXE': announceName = "LEVIATHAN AXE"; audio.playAxeHit(); break;
       case 'HMG': announceName = "HEAVY MACHINE GUN"; break;
       case 'SHOTGUN': announceName = "SHOTGUN"; break;
       case 'ROCKET': announceName = "ROCKET LAUNCHER"; break;
@@ -817,6 +1358,7 @@ class SlugVehicle {
       const shootDown = input.isDown('shoot');
       const bombPressed = input.isPressed('bomb');
       const enterPressed = input.isPressed('enter');
+      const executionPressed = input.isPressed('execution'); // Tecla R para execução
 
       // Movimentação
       if (moveLeft && !moveRight) {

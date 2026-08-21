@@ -35,7 +35,6 @@ class InputManager {
       case 'shoot': return this.keys['KeyK'] || this.keys['KeyZ'] || this.keys['TouchShoot'];
       case 'bomb': return this.keys['KeyL'] || this.keys['KeyX'] || this.keys['TouchBomb'];
       case 'enter': return this.keys['KeyE'] || this.keys['KeyC'] || this.keys['TouchEnter'];
-      case 'execution': return this.keys['KeyR'];
       default: return false;
     }
   }
@@ -47,7 +46,6 @@ class InputManager {
       case 'shoot': result = this.pressed['KeyK'] || this.pressed['KeyZ'] || this.pressed['TouchShoot']; break;
       case 'bomb': result = this.pressed['KeyL'] || this.pressed['KeyX'] || this.pressed['TouchBomb']; break;
       case 'enter': result = this.pressed['KeyE'] || this.pressed['KeyC'] || this.pressed['TouchEnter']; break;
-      case 'execution': result = this.pressed['KeyR']; break;
     }
     return !!result;
   }
@@ -286,6 +284,30 @@ class Game {
     });
   }
 
+  startGame() {
+        audio.resume();
+
+        let charNameDisplay = 'CLÁUDIO';
+        if (charId === 'claudio') {
+          charNameDisplay = 'CLÁUDIO';
+          audio.announce("CLÁUDIO SELECTED");
+        } else if (charId === 'marco') {
+          charNameDisplay = 'MARCO';
+          audio.announce("MARCO SELECTED");
+        } else if (charId === 'tarma') {
+          charNameDisplay = 'TARMA';
+          audio.announce("TARMA SELECTED");
+        } else if (charId === 'fio') {
+          charNameDisplay = 'FIO';
+          audio.announce("FIO SELECTED");
+        }
+
+        // Atualizar preview no HUD
+        this.updateHUDCharacter(charId, charNameDisplay);
+      });
+    });
+  }
+
   updateHUDCharacter(charId, name) {
     if (this.hudCharName) this.hudCharName.textContent = name;
     if (this.hudCharImg) {
@@ -304,7 +326,7 @@ class Game {
     audio.resume();
     audio.startBGM();
 
-    const charAnnounce = this.p1Character === 'claudio' ? 'CLÁUDIO' : this.p1Character.toUpperCase();
+    const charAnnounce = this.selectedCharacter === 'claudio' ? 'CLÁUDIO' : this.selectedCharacter.toUpperCase();
     audio.announce(`${charAnnounce}! MISSION 1 START`);
 
     document.getElementById('start-screen').style.display = 'none';
@@ -312,7 +334,7 @@ class Game {
     document.getElementById('victory-screen').style.display = 'none';
 
     this.map = new LevelMap(this.canvas.width, this.canvas.height);
-    this.player = new Player(60, this.canvas.height - 180, this.p1Character);
+    this.player = new Player(60, this.canvas.height - 180, this.selectedCharacter);
     this.enemies = [];
     this.boss = null;
     this.slugs = [];
@@ -334,10 +356,10 @@ class Game {
     });
 
     // Atualizar HUD com o personagem inicial
-    this.updateHUDCharacter(this.p1Character, charAnnounce);
+    this.updateHUDCharacter(this.selectedCharacter, charAnnounce);
 
     // Texto de Entrada Triunfal do Personagem
-    const introBadge = this.p1Character === 'claudio' ? '★ CLÁUDIO STRIKE LEADER ★' : `${charAnnounce} READY!`;
+    const introBadge = this.selectedCharacter === 'claudio' ? '★ CLÁUDIO STRIKE LEADER ★' : `${charAnnounce} READY!`;
     this.addFloatingText(this.player.x + 30, this.player.y - 35, introBadge, '#ffcc00', 13);
 
     this.state = 'PLAYING';

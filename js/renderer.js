@@ -221,8 +221,7 @@ class GameRenderer {
     ctx.restore();
   }
 
-  // --- RENDERIZAÇÃO DETALHADA DO JOGADOR (MARCO / COMMANDO) ---
-  // --- RENDERIZAÇÃO DETALHADA DO JOGADOR (CLÁUDIO, MARCO, TARMA, FIO) ---
+  // --- RENDERIZAÇÃO DETALHADA DO JOGADOR (CLAUDIO, MARCO, TARMA, FIO) ---
   drawPlayer(ctx, camera, p) {
     if (p.isInvulnerable && Math.floor(this.time * 20) % 2 === 0) {
       return; // Efeito de piscar na invulnerabilidade
@@ -231,25 +230,49 @@ class GameRenderer {
     ctx.save();
     ctx.translate(p.x - camera.x + p.width / 2, p.y - camera.y + p.height / 2);
 
-    // Direção horizontal (1 = Direita, -1 = Esquerda)
-    ctx.scale(p.facing, 1);
+    // SPIN 360° NA HORIZONTAL - Giro como um PIÃO (não inclinado!)
+    let spinScaleX = 1;
+    if (p.isSpinning && p.weapon === 'AXE') {
+      // Usar escala no eixo X para simular rotação horizontal
+      // spinAngle varia de 0 a 2π durante o giro
+      spinScaleX = Math.cos(p.spinAngle) * p.facing;
+      
+      // Quando está de costas (cos negativo), inverte a escala vertical também
+      if (Math.abs(Math.cos(p.spinAngle)) < 0.1) {
+        spinScaleX = 0.1 * p.facing; // Muito fino quando está de lado
+      }
+    }
 
-    // Sombra no chão
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    // Direção horizontal (1 = Direita, -1 = Esquerda)
+    ctx.scale(spinScaleX || p.facing, 1);
+
+    // Sombra no chão MAIS REALISTA
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.beginPath();
-    ctx.ellipse(0, p.height / 2 - 2, 16, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, p.height / 2 - 1, 18, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const isRunning = Math.abs(p.vx) > 0.1 && p.onGround;
     const isCrouching = p.isCrouching && p.onGround;
-    const runCycle = isRunning ? Math.sin(this.time * (p.characterId === 'claudio' ? 18 : 16)) : 0;
+    const runCycle = isRunning ? Math.sin(this.time * (p.characterId === 'claudio' ? 20 : 16)) : 0;
     const breathe = Math.sin(this.time * 4) * 1.5;
     const charId = p.characterId || 'claudio';
 
-    // Definição de Cores Base por Personagem
-    let skinColor = '#dfad88'; // Cláudio (tom de pele natural da foto)
-    let pantsColor = '#1e293b'; // Calça escura tática de Cláudio
-    let bootsColor = '#0f172a';
+    // Inclinação dinâmica ao correr
+    if (isRunning && !p.isAttacking) {
+      ctx.rotate(runCycle * 0.05);
+    }
+
+    // Pose de ataque com machado (inclinação para frente)
+    if (p.isAttacking && charId === 'claudio') {
+      ctx.rotate(p.facing * 0.15);
+      ctx.translate(p.facing * 8, -3);
+    }
+
+    // Definição de Cores Base por Personagem (MELHORADAS)
+    let skinColor = '#e8b896'; // Tom de pele mais natural e bonito para Claudio
+    let pantsColor = '#1a2332'; // Calça tactical mais escura
+    let bootsColor = '#0d1117';
     
     if (charId === 'marco') {
       skinColor = '#f0be8b';
@@ -316,61 +339,84 @@ class GameRenderer {
     ctx.translate(0, torsoY);
 
     if (charId === 'claudio') {
-      // --- CLÁUDIO: Camisa Branca Social Tática com Gola Aberta e Cinto Preto ---
-      // Coldre tático nas costas / coldre lateral
+      // --- CLAUDIO: Camisa Branca Social Tática com Gola Aberta e Cinto Preto (MELHORADO) ---
+      // Coldre tático nas costas com detalhes
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(-14, -8, 7, 12);
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(-13, -6, 5, 4);
+      ctx.fillRect(-15, -9, 8, 14);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(-14, -7, 6, 5);
+      
+      // Sombra da camisa (profundidade)
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(-7, -11, 18, 17);
 
-      // Camisa Branca com Caimento Impecável
-      ctx.fillStyle = '#f8fafc';
+      // Camisa Branca com Caimento Impecável (gradiente sutil)
+      const shirtGrad = ctx.createLinearGradient(-8, -12, 10, 4);
+      shirtGrad.addColorStop(0, '#ffffff');
+      shirtGrad.addColorStop(0.7, '#f8fafc');
+      shirtGrad.addColorStop(1, '#e2e8f0');
+      ctx.fillStyle = shirtGrad;
       ctx.fillRect(-8, -12, 18, 16);
 
-      // Borda preta interna do decote / gola em V (detalhe fiel à foto)
-      ctx.fillStyle = '#0f172a';
+      // Borda preta interna do decote / gola em V profunda
+      ctx.fillStyle = '#1e293b';
       ctx.beginPath();
       ctx.moveTo(-1, -12);
-      ctx.lineTo(3, -6);
-      ctx.lineTo(7, -12);
+      ctx.lineTo(4, -5);
+      ctx.lineTo(8, -12);
       ctx.closePath();
       ctx.fill();
 
       // Pele no decote da gola aberta
       ctx.fillStyle = skinColor;
       ctx.beginPath();
-      ctx.moveTo(0, -12);
-      ctx.lineTo(3, -7);
-      ctx.lineTo(6, -12);
+      ctx.moveTo(1, -12);
+      ctx.lineTo(4, -6);
+      ctx.lineTo(7, -12);
       ctx.closePath();
       ctx.fill();
 
-      // Gola Social Branca Estruturada
+      // Gola Social Branca Estruturada com sombra
       ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.1)';
+      ctx.shadowBlur = 2;
       ctx.beginPath();
-      ctx.moveTo(-4, -12);
-      ctx.lineTo(-1, -6);
+      ctx.moveTo(-5, -12);
+      ctx.lineTo(-2, -6);
       ctx.lineTo(2, -12);
       ctx.closePath();
       ctx.fill();
 
       ctx.beginPath();
-      ctx.moveTo(8, -12);
-      ctx.lineTo(5, -6);
-      ctx.lineTo(2, -12);
+      ctx.moveTo(9, -12);
+      ctx.lineTo(6, -6);
+      ctx.lineTo(3, -12);
       ctx.closePath();
       ctx.fill();
+      ctx.shadowBlur = 0;
 
-      // Botões da Camisa
+      // Botões da Camisa prateados
       ctx.fillStyle = '#cbd5e1';
-      ctx.fillRect(2, -3, 2, 2);
-      ctx.fillRect(2, 1, 2, 2);
+      ctx.beginPath();
+      ctx.arc(3, -2, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3, 2, 1.5, 0, Math.PI * 2);
+      ctx.fill();
 
-      // Cinto Tático de Couro Escuro com Fivela Prateada
+      // Cinto Tático de Couro Escuro com Fivela Prateada detalhada
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(-8, 2, 18, 4);
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(-1, 2, 5, 4);
+      ctx.fillRect(-8, 2, 18, 5);
+      // Fivela com brilho metálico
+      const buckleGrad = ctx.createLinearGradient(-1, 2, 4, 7);
+      buckleGrad.addColorStop(0, '#e2e8f0');
+      buckleGrad.addColorStop(0.5, '#94a3b8');
+      buckleGrad.addColorStop(1, '#64748b');
+      ctx.fillStyle = buckleGrad;
+      ctx.fillRect(-1, 2, 6, 5);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-1, 2, 6, 5);
 
     } else if (charId === 'marco') {
       // --- MARCO: Colete Vermelho Tático e Camiseta Branca ---
@@ -467,16 +513,16 @@ class GameRenderer {
       ctx.fillStyle = skinColor;
       ctx.fillRect(-6, -19, 3, 4); // Orelha
 
-      // Ponto de Diamante
-      ctx.fillStyle = '#ffffff';
+      // Brinco de Diamante com Brilho Realista
+      ctx.fillStyle = '#f0f0f0';
       ctx.fillRect(-6, -17, 2, 2);
 
       // Brilho pulsante / Sparkle no brinco de diamante
-      const glint = Math.abs(Math.sin(this.time * 6));
-      if (glint > 0.35) {
-        ctx.fillStyle = '#00ffff';
+      const glint = Math.abs(Math.sin(this.time * 8));
+      if (glint > 0.4) {
+        ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 10;
         ctx.fillRect(-7, -18, 3, 3);
         ctx.shadowBlur = 0;
       }
@@ -536,7 +582,7 @@ class GameRenderer {
       ctx.fillRect(4, -18, 3, 2);
     }
 
-    // 4. Braços e Arma com Rotação de Mira (8 Direções)
+    // 4. Braços e Arma com Rotação de Mira (8 Direções) + ANIMAÇÃO DE ATAQUE VERTICAL/SPIN
     let aimAngle = 0;
     if (p.aimY < 0) {
       aimAngle = p.aimX !== 0 ? -Math.PI / 4 : -Math.PI / 2;
@@ -544,28 +590,62 @@ class GameRenderer {
       aimAngle = Math.PI / 2;
     }
 
+    // ANIMAÇÃO ESPECIAL DO MACHADO
+    let axeSwingAngle = 0;
+    
+    if (p.isSpinning && p.weapon === 'AXE') {
+      // SPIN 360° - Girar o braço completamente
+      axeSwingAngle = p.spinAngle;
+      aimAngle = axeSwingAngle;
+      
+      // Efeito de blur/rastro durante spin
+      ctx.globalAlpha = 0.7 + Math.sin(p.spinAngle * 4) * 0.3;
+    } else if (p.isAttacking && p.weapon === 'AXE') {
+      // ATAQUE VERTICAL ESTILO DARIUS - De CIMA para BAIXO
+      const attackProgress = 1 - (p.meleeAttackTime / 0.4);
+      
+      // Movimento de -90° (topo) até +90° (chão) em arco vertical
+      axeSwingAngle = -Math.PI / 2 + (attackProgress * Math.PI); // -90° até +90°
+      aimAngle = axeSwingAngle;
+    }
+
     ctx.save();
-    ctx.translate(2, -4);
+    ctx.translate(4, -3);
     ctx.rotate(aimAngle);
 
     // Recoil da Arma quando atira
-    const recoil = p.shootRecoil ? -4 : 0;
+    const recoil = p.shootRecoil ? -5 : 0;
     ctx.translate(recoil, 0);
 
     // Desenhar a Arma Atual Segurada
-    this.drawWeaponSprite(ctx, p.weapon);
+    this.drawWeaponSprite(ctx, p.weapon, p.isAttacking || p.isSpinning, p.meleeAttackTime, p.isSpinning);
 
-    // Manga da Roupa do Braço
+    ctx.globalAlpha = 1.0; // Restaurar alpha
+
+    // Manga da Roupa do Braço (MELHORADA)
     if (charId === 'claudio') {
-      ctx.fillStyle = '#ffffff'; // Manga Branca Arregaçada
-      ctx.fillRect(-5, -4, 6, 6);
-      ctx.fillStyle = skinColor; // Antebraço
-      ctx.fillRect(-1, -3, 6, 5);
-      // Relógio Tático no Pulso
+      // Manga branca arregaçada com sombra
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.1)';
+      ctx.shadowBlur = 2;
+      ctx.fillRect(-6, -5, 7, 7);
+      ctx.shadowBlur = 0;
+      
+      // Antebraço com tom de pele melhorado
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-1, -4, 7, 6);
+      
+      // Relógio Tático no Pulso (detalhado)
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(2, -5, 3, 7);
       ctx.fillStyle = '#00d9ff';
-      ctx.fillRect(2, -4, 2, 6);
-      ctx.fillStyle = '#1e293b'; // Luva tática sem dedos
-      ctx.fillRect(3, -2, 4, 4);
+      ctx.fillRect(2.5, -4, 2, 2);
+      
+      // Luva tática sem dedos
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(4, -2, 5, 5);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(5, -1, 3, 2); // Dedos visíveis
     } else {
       ctx.fillStyle = skinColor;
       ctx.fillRect(-4, -3, 8, 5);
@@ -601,58 +681,135 @@ class GameRenderer {
     ctx.restore(); // Fim do player
   }
 
-  // Desenho dos Sprites de Armas
-  drawWeaponSprite(ctx, weapon) {
+  // Desenho dos Sprites de Armas (MACHADO MELHORADO)
+  drawWeaponSprite(ctx, weapon, isAttacking = false, attackTime = 0, isSpinning = false) {
     switch (weapon) {
       case 'AXE':
-        // --- MACHADO NÓRDICO (LEVIATHAN AXE DOURADO E PRETO COM RUNAS) ---
+        // --- MACHADO NÓRDICO LEVIATHAN (DOURADO E PRETO COM RUNAS DETALHADAS) ---
         ctx.save();
-        ctx.translate(4, -6);
-        ctx.rotate(-0.2);
+        
+        // Efeito de brilho pulsante durante ataque ou spin
+        if (isAttacking || isSpinning) {
+          ctx.shadowColor = isSpinning ? '#ff3300' : '#ffd700';
+          ctx.shadowBlur = isSpinning ? 25 : 15 + Math.sin(this.time * 40) * 5;
+        }
 
-        // Cabo de Madeira Entalhada Curvo e Preto/Dourado
-        ctx.fillStyle = '#1a1816'; // Madeira escura
-        ctx.fillRect(-8, 8, 22, 4);
-        ctx.fillStyle = '#d4af37'; // Detalhes Dourados no cabo
-        ctx.fillRect(-6, 8, 4, 4);
-        ctx.fillRect(2, 8, 4, 4);
-        ctx.fillRect(10, 8, 4, 4);
-
-        // Anel de Fixação Dourado no Topo
+        ctx.translate(6, -8);
+        
+        // Cabo de Madeira Entalhada Nórdica (textura melhorada)
+        const handleGrad = ctx.createLinearGradient(0, 8, 0, 12);
+        handleGrad.addColorStop(0, '#2d1f0c');
+        handleGrad.addColorStop(0.5, '#3d2f1f');
+        handleGrad.addColorStop(1, '#1a1816');
+        ctx.fillStyle = handleGrad;
+        ctx.fillRect(-10, 8, 24, 5);
+        
+        // Entalhes no cabo
+        ctx.strokeStyle = '#4a3625';
+        ctx.lineWidth = 1;
+        for (let x = -8; x < 14; x += 4) {
+          ctx.beginPath();
+          ctx.moveTo(x, 8);
+          ctx.lineTo(x, 13);
+          ctx.stroke();
+        }
+        
+        // Detalhes Dourados no cabo (grip rúnico)
+        ctx.fillStyle = '#d4af37';
+        ctx.fillRect(-7, 9, 5, 3);
+        ctx.fillRect(0, 9, 5, 3);
+        ctx.fillRect(7, 9, 5, 3);
+        
+        // Círculos rúnicos no grip
         ctx.fillStyle = '#ffd700';
-        ctx.fillRect(12, 6, 5, 8);
+        for (let x = -5; x <= 9; x += 7) {
+          ctx.beginPath();
+          ctx.arc(x, 10.5, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
-        // Lâmina Negra Larga com Curvatura de Machado de Batalha Nórdico
-        ctx.fillStyle = '#11161d';
+        // Anel de Fixação Dourado no Topo (mais detalhado)
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(12, 6, 6, 9);
+        ctx.fillStyle = '#b8860b';
+        ctx.fillRect(13, 7, 4, 1);
+        ctx.fillRect(13, 13, 4, 1);
+
+        // Lâmina Negra Larga (forma mais agressiva)
+        ctx.fillStyle = '#0d1117';
         ctx.beginPath();
-        ctx.moveTo(14, 6);
-        ctx.lineTo(26, -6);
-        ctx.quadraticCurveTo(32, 10, 26, 24);
-        ctx.lineTo(14, 14);
+        ctx.moveTo(15, 7);
+        ctx.lineTo(30, -8);
+        ctx.quadraticCurveTo(36, 11, 30, 26);
+        ctx.lineTo(15, 13);
         ctx.closePath();
         ctx.fill();
 
-        // Fio da Lâmina em Prata Polida
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 2;
+        // Fio da Lâmina em Prata Polida (mais brilhante)
+        ctx.strokeStyle = '#f0f0f0';
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.moveTo(26, -6);
-        ctx.quadraticCurveTo(32, 10, 26, 24);
+        ctx.moveTo(30, -8);
+        ctx.quadraticCurveTo(36, 11, 30, 26);
         ctx.stroke();
 
-        // Entalhes Rúnicos Dourados na Lâmina
-        ctx.fillStyle = '#ffcc00';
+        // Entalhes Rúnicos Dourados BRILHANTES na Lâmina
+        ctx.fillStyle = '#ffee00';
         ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 4;
-        ctx.fillRect(18, 4, 6, 2);
-        ctx.fillRect(20, 8, 4, 2);
-        ctx.fillRect(19, 12, 5, 2);
+        ctx.shadowBlur = 8;
+        
+        // Runas nórdicas estilizadas
+        ctx.fillRect(19, 5, 8, 2);
+        ctx.fillRect(21, 9, 5, 2);
+        ctx.fillRect(20, 13, 6, 2);
+        
+        // Símbolos rúnicos
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(20, 6);
+        ctx.lineTo(24, 6);
+        ctx.lineTo(22, 4);
+        ctx.stroke();
+
         ctx.shadowBlur = 0;
 
-        // Espigão Traseiro e Ponta Superior
+        // Espigão Traseiro pontiagudo
         ctx.fillStyle = '#d4af37';
-        ctx.fillRect(10, 3, 4, 3);
-        ctx.fillRect(25, -7, 3, 3);
+        ctx.beginPath();
+        ctx.moveTo(10, 4);
+        ctx.lineTo(12, 6);
+        ctx.lineTo(12, 14);
+        ctx.lineTo(10, 16);
+        ctx.fill();
+
+        // Ponta Superior da lâmina (spike)
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(27, -9);
+        ctx.lineTo(30, -8);
+        ctx.lineTo(29, -6);
+        ctx.fill();
+
+        // Trilha de energia dourada durante ataque/spin
+        if (isAttacking || isSpinning) {
+          const trailCount = isSpinning ? 12 : 5; // Mais trilhas no spin!
+          for (let i = 0; i < trailCount; i++) {
+            ctx.fillStyle = isSpinning ? 
+              `rgba(255, 100, 0, ${0.9 - i * 0.06})` : // Laranja intenso no spin
+              `rgba(255, 215, 0, ${0.6 - i * 0.1})`;
+            ctx.fillRect(25 + i * 3, 6 - i * 1.5, 4, 10 + i * 0.5);
+          }
+          
+          // Círculo de energia no spin
+          if (isSpinning) {
+            ctx.strokeStyle = `rgba(255, 215, 0, ${0.8 - Math.sin(this.time * 30) * 0.3})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(30, 10, 15 + Math.sin(this.time * 20) * 5, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
 
         ctx.restore();
         break;
@@ -755,33 +912,75 @@ class GameRenderer {
     ctx.save();
     
     if (isAxe || charId === 'claudio') {
-      // --- CORTE ÉPICO DO MACHADO NÓRDICO (ONDA DOURADA / RÚNICA MASSIVA) ---
-      const progress = 1 - timer;
-      const startAngle = -Math.PI / 2.5 + progress * 0.8;
-      const endAngle = Math.PI / 2.5 + progress * 0.8;
+      // --- CORTE ÉPICO DO MACHADO NÓRDICO (ONDA DOURADA MASSIVA EM ARCO LARGO) ---
+      const progress = 1 - (timer / 0.4); // Normalizar de 0 a 1
+      const startAngle = -Math.PI * 0.7 + progress * 1.2;
+      const endAngle = Math.PI * 0.7 + progress * 1.2;
 
+      // Arco externo dourado brilhante
       ctx.strokeStyle = '#ffd700';
       ctx.shadowColor = '#ffaa00';
-      ctx.shadowBlur = 18;
-      ctx.lineWidth = 7;
+      ctx.shadowBlur = 20;
+      ctx.lineWidth = 8;
 
       ctx.beginPath();
-      ctx.arc(14, 0, 44, startAngle, endAngle);
+      ctx.arc(18, 0, 50, startAngle, endAngle);
       ctx.stroke();
 
-      // Rastro secundário brilhante branco/fogo
+      // Arco médio branco incandescente
       ctx.strokeStyle = '#ffffff';
+      ctx.shadowBlur = 15;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(18, 0, 48, startAngle, endAngle);
+      ctx.stroke();
+
+      // Arco interno com efeito de energia rúnica
+      ctx.strokeStyle = '#ffee00';
+      ctx.shadowBlur = 10;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(14, 0, 42, startAngle, endAngle);
+      ctx.arc(18, 0, 45, startAngle, endAngle);
       ctx.stroke();
 
-      // Lâmina dourada e preta do machado em movimento
+      // Desenhar o machado físico em movimento no arco
+      const midAngle = (startAngle + endAngle) / 2;
+      const axeX = 18 + Math.cos(midAngle) * 45;
+      const axeY = Math.sin(midAngle) * 45;
+
+      ctx.save();
+      ctx.translate(axeX, axeY);
+      ctx.rotate(midAngle + Math.PI / 2);
+
+      // Lâmina preta do machado
       ctx.fillStyle = '#11161d';
-      ctx.fillRect(18, -4, 20, 8);
+      ctx.beginPath();
+      ctx.moveTo(-8, -6);
+      ctx.lineTo(8, -12);
+      ctx.lineTo(12, 0);
+      ctx.lineTo(8, 12);
+      ctx.lineTo(-8, 6);
+      ctx.closePath();
+      ctx.fill();
+
+      // Detalhes dourados na lâmina
       ctx.fillStyle = '#ffd700';
-      ctx.fillRect(14, -6, 6, 12);
-      ctx.fillRect(24, -3, 10, 6);
+      ctx.fillRect(-4, -8, 10, 3);
+      ctx.fillRect(-4, 5, 10, 3);
+
+      // Cabo do machado
+      ctx.fillStyle = '#3d2f1f';
+      ctx.fillRect(-12, -2, 8, 4);
+
+      ctx.restore();
+
+      // Partículas de energia ao longo do arco
+      for (let a = startAngle; a < endAngle; a += 0.3) {
+        const px = 18 + Math.cos(a) * (45 + Math.random() * 8);
+        const py = Math.sin(a) * (45 + Math.random() * 8);
+        ctx.fillStyle = Math.random() > 0.5 ? '#ffcc00' : '#ffffff';
+        ctx.fillRect(px - 2, py - 2, 4, 4);
+      }
 
     } else {
       // Corte padrão de facão
@@ -1231,37 +1430,7 @@ class GameRenderer {
       ctx.save();
       ctx.translate(p.x, p.y);
 
-      if (p.type === 'axe_wave') {
-        // --- ONDA DE CHOQUE DO MACHADO NÓRDICO ---
-        const rot = this.time * 25;
-        ctx.rotate(rot);
-
-        // Machado giratório de energia dourada
-        ctx.fillStyle = '#ffd700';
-        ctx.shadowColor = '#ffaa00';
-        ctx.shadowBlur = 15;
-        ctx.beginPath();
-        ctx.arc(0, 0, 16, 0, Math.PI * 1.3);
-        ctx.lineTo(0, 0);
-        ctx.closePath();
-        ctx.fill();
-
-        // Lâmina negra no centro
-        ctx.fillStyle = '#11161d';
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 1.2);
-        ctx.lineTo(0, 0);
-        ctx.closePath();
-        ctx.fill();
-
-        // Rastro de fogo e runas
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(0, 0, 18, 0, Math.PI * 2);
-        ctx.stroke();
-
-      } else if (p.type === 'bullet') {
+      if (p.type === 'bullet') {
         // Bala Normal / HMG: Traçante Dourado Incandescente
         ctx.fillStyle = '#ffe600';
         ctx.shadowColor = '#ff7700';
