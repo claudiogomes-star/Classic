@@ -161,6 +161,7 @@ class Game {
     this.cinematicActive = false;
     this.cinematicFlash = 0;
     this.cinematicFlashColor = '#ffffff';
+    this.finaleElapsed = 0;
     this.slugs = [];
     this.pows = [];
     this.projectiles = [];
@@ -395,6 +396,7 @@ class Game {
     this.cinematicActive = false;
     this.cinematicFlash = 0;
     this.cinematicFlashColor = '#ffffff';
+    this.finaleElapsed = 0;
     this.slugs = [];
     this.pows = [];
     this.projectiles = [];
@@ -839,7 +841,21 @@ class Game {
   }
 
   updateFinaleCinematic(dt) {
-    if (this.dragon && this.dragon.state !== 'DONE') this.dragon.update(dt, this);
+    this.finaleElapsed += dt;
+    try {
+      if (this.dragon && this.dragon.state !== 'DONE') this.dragon.update(dt, this);
+    } catch (error) {
+      // A vitória nunca pode deixar o loop preso caso um efeito visual falhe.
+      console.error('Falha na cinemática final:', error);
+      this.finishDragonFinale();
+      return;
+    }
+
+    if (this.state !== 'PLAYING') return;
+    if (!this.dragon || this.dragon.state === 'DONE' || this.finaleElapsed >= 10.5) {
+      this.finishDragonFinale();
+      return;
+    }
     this.cinematicFlash = Math.max(0, this.cinematicFlash - dt * 1.8);
 
     // A carcaça, explosões e raios continuam vivos durante a cena, mas os
@@ -1039,12 +1055,20 @@ class Game {
   startDragonFinale(boss) {
     if (this.dragon || !boss) return;
     this.cinematicActive = true;
+    this.finaleElapsed = 0;
     this.projectiles = [];
     this.players.forEach(player => {
       player.isInvulnerable = true;
       player.vx = 0;
     });
     this.dragon = new DragonCinematic(boss, this);
+  }
+
+  finishDragonFinale() {
+    if (this.state === 'VICTORY') return;
+    this.cinematicActive = false;
+    this.lightningEffects = [];
+    this.missionComplete();
   }
 
   triggerDragonClawStrike(boss) {

@@ -53,14 +53,137 @@ class GameRenderer {
     });
   }
 
+  // --- CAPA ARCADE DA TELA INICIAL ---
+  drawOdysseusCover(ctx, canvasWidth, canvasHeight, time) {
+    const coverX = canvasWidth * 0.77;
+    const coverY = canvasHeight * 0.57 + Math.sin(time * 1.3) * 4;
+    const drawTrooper = (x, y, scale, color, pose) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#101827';
+      ctx.lineWidth = 3;
+      ctx.fillRect(-10, -5, 20, 31);
+      ctx.beginPath();
+      ctx.arc(0, -16, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#e2b38d';
+      ctx.fillRect(-6, -21, 12, 8);
+      ctx.strokeStyle = '#c7efff';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-8, 25);
+      ctx.lineTo(-14 - pose, 46);
+      ctx.moveTo(8, 25);
+      ctx.lineTo(15 + pose, 46);
+      ctx.moveTo(-9, 2);
+      ctx.lineTo(-21, 14 + pose);
+      ctx.moveTo(9, 2);
+      ctx.lineTo(24, -7 + pose);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    ctx.save();
+    ctx.globalAlpha = 0.96;
+    ctx.globalCompositeOperation = 'screen';
+    const glow = ctx.createRadialGradient(coverX, coverY, 12, coverX, coverY, 260);
+    glow.addColorStop(0, 'rgba(255, 175, 65, 0.42)');
+    glow.addColorStop(0.54, 'rgba(63, 173, 255, 0.16)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(coverX - 270, coverY - 245, 540, 490);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Tropas em camadas: a diferença de altura e pose cria uma capa com
+    // sensação de esquadrão, não uma fila rígida de bonecos.
+    drawTrooper(coverX - 150, coverY + 53, 0.8, '#24567a', Math.sin(time * 2.1) * 3);
+    drawTrooper(coverX - 80, coverY + 26, 0.98, '#61417c', Math.sin(time * 2.1 + 1) * 3);
+    drawTrooper(coverX + 100, coverY + 35, 0.92, '#2d6a62', Math.sin(time * 2.1 + 2) * 3);
+    drawTrooper(coverX + 160, coverY + 64, 0.76, '#7b3b35', Math.sin(time * 2.1 + 3) * 3);
+
+    // Odisseu no primeiro plano: capacete, lança e escudo inspiram o tema
+    // grego, preservando a leitura arcade e sem depender de arte licenciada.
+    ctx.save();
+    ctx.translate(coverX, coverY);
+    const shieldPulse = Math.sin(time * 3) * 0.08;
+    ctx.strokeStyle = '#e7c158';
+    ctx.lineWidth = 8;
+    ctx.shadowColor = '#ffba43';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.moveTo(42, -122);
+    ctx.lineTo(42, 128);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#9e332f';
+    ctx.strokeStyle = '#ffd36f';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(-35, 27, 42 + shieldPulse * 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffe9a5';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(-35, 27, 21, 0, Math.PI * 2);
+    ctx.moveTo(-56, 27);
+    ctx.lineTo(-14, 27);
+    ctx.moveTo(-35, 6);
+    ctx.lineTo(-35, 48);
+    ctx.stroke();
+    ctx.fillStyle = '#26466f';
+    ctx.strokeStyle = '#101827';
+    ctx.lineWidth = 4;
+    ctx.fillRect(-18, -13, 38, 66);
+    ctx.strokeRect(-18, -13, 38, 66);
+    ctx.fillStyle = '#e7b78e';
+    ctx.beginPath();
+    ctx.arc(1, -43, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#bc9b4f';
+    ctx.beginPath();
+    ctx.moveTo(-25, -49);
+    ctx.lineTo(-13, -78);
+    ctx.lineTo(12, -85);
+    ctx.lineTo(29, -51);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#fff0a4';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, -84);
+    ctx.quadraticCurveTo(7, -108, 21, -116);
+    ctx.stroke();
+    ctx.strokeStyle = '#c9efff';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-9, 52);
+    ctx.lineTo(-25, 96);
+    ctx.moveTo(12, 52);
+    ctx.lineTo(29, 96);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = 'bold 10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffe68a';
+    ctx.shadowColor = '#ff8426';
+    ctx.shadowBlur = 11;
+    ctx.fillText('ODYSSEUS // TROJAN SQUAD', coverX, coverY + 132);
+    ctx.restore();
+  }
+
   // --- EASTER EGGS DA TELA INICIAL ---
   // Referências desenhadas no próprio Canvas para manter a abertura leve e
   // publicável no GitHub Pages, sem baixar imagens ou marcas externas.
   drawMenuEasterEggs(ctx, canvasWidth, canvasHeight, time) {
-    const loop = (value, width) => ((value % width) + width) % width;
+    this.drawOdysseusCover(ctx, canvasWidth, canvasHeight, time);
     const drawLabel = (text, x, y, color) => {
       ctx.save();
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '9px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = color;
       ctx.shadowColor = color;
@@ -70,12 +193,12 @@ class GameRenderer {
     };
 
     ctx.save();
-    ctx.globalAlpha = 0.72;
+    ctx.globalAlpha = 0.98;
 
     // Dois irmãos do britpop em uma plataforma voadora: cabelos, postura e
     // micro-movimento distintos evitam que a referência pareça estática.
-    const britX = loop(canvasWidth + 160 - time * 38, canvasWidth + 340) - 170;
-    const britY = 92 + Math.sin(time * 1.6) * 13;
+    const britX = 142 + Math.sin(time * 0.8) * 50;
+    const britY = 118 + Math.sin(time * 1.6) * 13;
     ctx.save();
     ctx.translate(britX, britY);
     ctx.rotate(Math.sin(time * 1.6) * 0.04);
@@ -112,8 +235,8 @@ class GameRenderer {
 
     // Brasão azul com um galo pixelado: referência futebolística estilizada,
     // sem reproduzir o escudo oficial.
-    const crestX = loop(time * 31 - 90, canvasWidth + 260) - 85;
-    const crestY = 310 + Math.cos(time * 1.35) * 26;
+    const crestX = canvasWidth - 118 + Math.sin(time * 0.92 + 1) * 34;
+    const crestY = 160 + Math.cos(time * 1.35) * 22;
     ctx.save();
     ctx.translate(crestX, crestY);
     ctx.rotate(Math.sin(time * 1.35) * 0.12);
@@ -146,8 +269,8 @@ class GameRenderer {
     drawLabel('N17 SKY CREST', crestX, crestY + 58, '#b9e7ff');
 
     // Corredor e banco flutuante, numa piscadela para filmes de estrada.
-    const runnerX = loop(canvasWidth * 0.72 + time * 24, canvasWidth + 320) - 130;
-    const runnerY = 405 + Math.sin(time * 1.9 + 1) * 14;
+    const runnerX = 120 + Math.sin(time * 1.1 + 2) * 46;
+    const runnerY = canvasHeight - 112 + Math.sin(time * 1.9 + 1) * 14;
     ctx.save();
     ctx.translate(runnerX, runnerY);
     ctx.rotate(Math.sin(time * 1.9 + 1) * 0.045);
@@ -2398,6 +2521,25 @@ class GameRenderer {
     ctx.beginPath();
     ctx.ellipse(0, boss.height / 2 - 6, boss.width / 2 + 35, 24, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Trilhas de plasma deixam o dash impossível de confundir com caminhada.
+    if (boss.state === 'RUSH') {
+      ctx.save();
+      const trailDirection = -(boss.facing || -1);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = 'rgba(255, 45, 45, 0.78)';
+      ctx.shadowColor = '#ff3b18';
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 9;
+      for (let trail = 0; trail < 5; trail++) {
+        const y = -72 + trail * 30 + Math.sin(boss.animTime * 24 + trail) * 8;
+        ctx.beginPath();
+        ctx.moveTo(trailDirection * 24, y);
+        ctx.lineTo(trailDirection * (150 + trail * 28), y + Math.sin(boss.animTime * 18 + trail) * 9);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     // 2. Renderização Articulada do MechaGodzilla com Sprites HD
     if (this.mechaSprites && this.mechaSprites.loaded) {

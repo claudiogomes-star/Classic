@@ -1198,8 +1198,8 @@ class Boss {
     this.height = 240;
     // Vida calibrada para uma luta de chefe: ataques especiais ainda causam
     // impacto, mas não encerram a batalha em poucos segundos.
-    this.hp = 6500;
-    this.maxHp = 6500;
+    this.hp = 7600;
+    this.maxHp = 7600;
     this.flashTimer = 0;
     this.phase = 1;
     this.isDead = false;
@@ -1221,6 +1221,8 @@ class Boss {
     this.chaseDistance = 230;
     this.stepTimer = 0;
     this.stepCount = 0;
+    this.rushDamageTimer = 0;
+    this.rushPulseTimer = 0;
 
     // Animações Fluidas e Articulação - MUITO MAIS SUAVE!
     this.animTime = 0;
@@ -1384,23 +1386,28 @@ class Boss {
         // pelo texto/efeito no começo, mas obriga o jogador a sair da linha.
         const rushDirection = this.rushDirection || this.facing;
         this.facing = rushDirection;
-        this.vx = rushDirection * this.speed * 2.35;
+        const rushMultiplier = this.phase === 3 ? 5.1 : (this.phase === 2 ? 4.45 : 3.8);
+        this.vx = rushDirection * this.speed * rushMultiplier;
         const rushGait = Math.sin(this.animTime * 13);
         this.targetBodyBob = rushGait * 5 + Math.abs(rushGait) * 7;
         this.targetBodyLean = rushDirection * (0.16 + rushGait * 0.05);
         this.spineGlow = 1.2;
 
         this.stepTimer += dt;
-        if (this.stepTimer >= 0.18) {
+        if (this.stepTimer >= 0.11) {
           this.stepTimer = 0;
-          game.triggerScreenShake(6, 0.12);
+          game.triggerScreenShake(8, 0.14);
           game.spawnDust(this.x + this.width / 2, this.y + this.height - 5);
+          game.spawnSpark(this.x + (rushDirection === 1 ? 12 : this.width - 12), this.y + this.height - 46);
         }
 
         this.rushDamageTimer = Math.max(0, (this.rushDamageTimer || 0) - dt);
         if (this.rushDamageTimer <= 0) {
-          this.rushDamageTimer = 0.3;
-          this.damagePlayersNear(this.x + this.width / 2, this.y + this.height / 2, 145, 38, game);
+          this.rushDamageTimer = 0.2;
+          const impactX = this.x + (rushDirection === 1 ? this.width + 52 : -52);
+          const rushDamage = this.phase === 3 ? 78 : (this.phase === 2 ? 64 : 50);
+          this.damagePlayersNear(impactX, this.y + this.height * 0.58, 205, rushDamage, game);
+          game.spawnExplosion(impactX, this.y + this.height * 0.62, 26);
         }
 
         if (this.stateTimer <= 0 || (rushDirection === -1 && this.x <= this.minArenaX) || (rushDirection === 1 && this.x >= this.maxArenaX)) {
@@ -1546,8 +1553,12 @@ class Boss {
       choices.push('TITAN_STOMP', 'TITAN_STOMP', 'PREPARE_LASER');
     }
 
-    if (this.phase >= 2 && distToPlayer > 250 && distToPlayer < 760) {
-      choices.push('RUSH', 'RUSH');
+    // A investida volta a ser uma assinatura do Titã já na fase 1. Nas
+    // fases seguintes ela aparece com mais frequência e alcance maior.
+    if (distToPlayer > 180 && distToPlayer < 980) {
+      choices.push('RUSH');
+      if (this.phase >= 2) choices.push('RUSH', 'RUSH');
+      if (this.phase === 3) choices.push('RUSH');
     }
 
     // Evita repetir o mesmo ataque especial em sequência: a luta fica mais
@@ -1580,14 +1591,15 @@ class Boss {
 
   executeRush(game) {
     this.state = 'RUSH';
-    this.stateTimer = this.phase === 3 ? 1.25 : 0.95;
+    this.stateTimer = this.phase === 3 ? 1.45 : (this.phase === 2 ? 1.22 : 1.05);
     this.rushDirection = this.targetFacing;
     this.facing = this.rushDirection;
     this.stepTimer = 0;
     this.rushDamageTimer = 0;
+    this.rushPulseTimer = 0;
     audio.playMechaRoar();
-    game.triggerScreenShake(9, 0.2);
-    game.addFloatingText(this.x + this.width / 2, this.y - 25, '⚠️ TITAN CHARGE! ⚠️', '#ff3300', 15);
+    game.triggerScreenShake(12, 0.25);
+    game.addFloatingText(this.x + this.width / 2, this.y - 25, '⚠️ TITAN BREAKER CHARGE! ⚠️', '#ff3300', 15);
   }
 
   executeMissileSalvo(game) {
@@ -1597,7 +1609,7 @@ class Boss {
     audio.playBossWarning();
     game.addFloatingText(this.x + this.width / 2, this.y - 25, '🚀 MISSILE SWARM! 🚀', '#ffaa00', 14);
 
-    const count = this.phase === 3 ? 8 : (this.phase === 2 ? 6 : 4);
+    const count = this.phase === 3 ? 10 : (this.phase === 2 ? 7 : 5);
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
         if (game.runId !== attackRunId || game.boss !== this || this.isDead || game.cinematicActive || game.state !== 'PLAYING') return;
@@ -1611,7 +1623,7 @@ class Boss {
         const speed = 8.5;
         game.projectiles.push(new Projectile(
           sx, sy, Math.cos(angle + spread) * speed, Math.sin(angle + spread) * speed,
-          'rocket', 35, false, 6, 3.5, true
+          'rocket', this.phase === 3 ? 48 : 40, false, 6, 3.5, true
         ));
         audio.playShootRocket();
         game.spawnSmoke(sx, sy, 8);
@@ -1628,7 +1640,7 @@ class Boss {
     game.addFloatingText(this.x + this.width / 2, this.y + this.height - 20, '💥 TITAN SEISMIC STOMP! 💥', '#ff3300', 15);
 
     // Onda de choque que viaja pelo chão da arena em ambas as direções
-    const waveCount = 12;
+    const waveCount = this.phase === 3 ? 16 : 13;
     for (let i = 0; i < waveCount; i++) {
       setTimeout(() => {
         if (game.runId !== attackRunId || game.boss !== this || this.isDead || game.cinematicActive || game.state !== 'PLAYING') return;
@@ -1638,14 +1650,15 @@ class Boss {
 
         game.spawnExplosion(sx1, groundY, 28);
         game.spawnExplosion(sx2, groundY, 28);
-        this.damagePlayersNear(sx1, groundY, 56, 28, game);
-        this.damagePlayersNear(sx2, groundY, 56, 28, game);
+        const stompDamage = this.phase === 3 ? 42 : 34;
+        this.damagePlayersNear(sx1, groundY, 64, stompDamage, game);
+        this.damagePlayersNear(sx2, groundY, 64, stompDamage, game);
 
         // Disparo secundário de plasma
         if (i % 3 === 0) {
           const cannonY = this.y + 90;
           const cannonX = this.x + (this.facing === 1 ? this.width + 10 : -10);
-          game.projectiles.push(new Projectile(cannonX, cannonY, this.facing * 16, (Math.random() - 0.5) * 1.5, 'laser', 25, false, 6, 1.2));
+          game.projectiles.push(new Projectile(cannonX, cannonY, this.facing * 17, (Math.random() - 0.5) * 1.5, 'laser', this.phase === 3 ? 36 : 29, false, 6, 1.2));
           audio.playShootLaser();
         }
       }, i * 55);
@@ -1667,7 +1680,7 @@ class Boss {
     game.players.forEach(p => {
       if (p.isDead || p.isInvulnerable) return;
       if (p.x + p.width > beamMinX && p.x < beamMaxX && p.y + p.height > beamMinY && p.y < beamMaxY) {
-        p.takeDamage(30, game);
+        p.takeDamage(this.phase === 3 ? 38 : 32, game);
         game.spawnBlood(p.x + p.width / 2, p.y + p.height / 2);
       }
     });

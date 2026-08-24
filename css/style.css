@@ -406,8 +406,8 @@ body {
 /* A abertura deixa o cenário do canvas respirar: os easter eggs ficam vivos
    ao fundo, enquanto o painel continua confortável para leitura. */
 #start-screen {
-  background: linear-gradient(180deg, rgba(4, 6, 12, 0.72), rgba(4, 6, 12, 0.84));
-  backdrop-filter: blur(2px);
+  background: linear-gradient(180deg, rgba(4, 6, 12, 0.48), rgba(4, 6, 12, 0.7));
+  backdrop-filter: blur(1px);
 }
 
 .overlay-screen::-webkit-scrollbar {
@@ -449,6 +449,33 @@ body {
   letter-spacing: 3px;
   margin-bottom: 16px;
   text-shadow: 0 0 10px var(--neon-blue);
+}
+
+.home-cover-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: min(520px, 92vw);
+  margin: 0 0 16px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 209, 93, 0.75);
+  border-left: 5px solid #ff7a18;
+  border-right: 5px solid #00d9ff;
+  background: linear-gradient(90deg, rgba(24, 15, 35, 0.78), rgba(7, 29, 48, 0.78));
+  box-shadow: 0 0 22px rgba(255, 117, 24, 0.32), inset 0 0 16px rgba(0, 217, 255, 0.14);
+}
+
+.cover-rank {
+  color: #ffe07d;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 9px rgba(255, 178, 45, 0.85);
+}
+
+.cover-mission {
+  color: #bfefff;
+  font-size: 6px;
+  letter-spacing: 1.2px;
 }
 
 /* --- SEÇÃO DE SELEÇÃO DE PERSONAGENS --- */
