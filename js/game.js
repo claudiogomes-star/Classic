@@ -230,6 +230,21 @@ class Game {
       });
     }
 
+    // A capa abre primeiro. O botão leva à seleção de personagem sem perder
+    // a escolha de Claudio/Jessica antes da missão começar.
+    const openGameBtn = document.getElementById('btn-open-game');
+    if (openGameBtn) {
+      openGameBtn.addEventListener('click', () => {
+        const homeScreen = document.getElementById('home-screen');
+        const startScreen = document.getElementById('start-screen');
+        if (homeScreen) homeScreen.style.display = 'none';
+        if (startScreen) startScreen.style.display = 'flex';
+        audio.init();
+        audio.resume();
+        audio.announce('CYBER CLASSICA');
+      });
+    }
+
     // Botão Reiniciar
     const restartBtn = document.getElementById('btn-restart-game');
     if (restartBtn) {

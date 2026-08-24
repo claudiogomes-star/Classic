@@ -383,6 +383,115 @@ body {
 }
 
 /* Modais e Menus */
+.home-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  overflow: hidden;
+  background: #02030a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Em telas ultrawide, a capa 16:9 não pode usar `cover`: isso corta o título
+   e os personagens. A camada desfocada preenche as laterais; a arte nítida
+   fica inteira no centro. */
+.home-screen::before {
+  content: '';
+  position: absolute;
+  inset: -24px;
+  z-index: 0;
+  background: url('../assets/cyber-classica-home.png') center / cover no-repeat;
+  filter: blur(20px) brightness(0.45) saturate(1.25);
+  transform: scale(1.08);
+}
+
+.home-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  image-rendering: auto;
+  animation: home-cover-breathe 9s ease-in-out infinite alternate;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes home-cover-breathe {
+  from { transform: scale(1); filter: saturate(1) contrast(1); }
+  to { transform: scale(1.035); filter: saturate(1.12) contrast(1.06); }
+}
+
+.home-cover-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(ellipse at center 76%, rgba(3, 8, 23, 0.04) 0%, rgba(3, 8, 23, 0.5) 63%, rgba(2, 2, 9, 0.9) 100%),
+    linear-gradient(180deg, rgba(0, 0, 8, 0.2), rgba(0, 0, 8, 0.03) 48%, rgba(0, 0, 8, 0.55));
+}
+
+.home-launch-panel {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: clamp(26px, 5.2vh, 52px);
+  transform: translateX(-50%);
+  min-width: min(450px, 84vw);
+  padding: 13px 18px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(77, 232, 255, 0.55);
+  background: linear-gradient(90deg, rgba(5, 9, 31, 0.76), rgba(38, 5, 42, 0.78));
+  box-shadow: 0 0 28px rgba(0, 221, 255, 0.28), inset 0 0 20px rgba(255, 37, 163, 0.16);
+  backdrop-filter: blur(4px);
+}
+
+.home-launch-tag,
+.home-launch-hint {
+  font-size: 7px;
+  letter-spacing: 1.4px;
+  color: #baf7ff;
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.9);
+}
+
+.home-launch-hint {
+  color: #ffe6a6;
+  font-size: 6px;
+}
+
+.btn-home-start {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #fff;
+  border: 3px solid #ffe65b;
+  border-radius: 4px;
+  padding: 16px 36px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #ff487d, #d40064 48%, #76004d);
+  box-shadow: 0 0 0 3px rgba(26, 3, 31, 0.95), 0 0 23px rgba(255, 37, 163, 0.95);
+  text-shadow: 2px 2px 0 #5e0038;
+  animation: home-start-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.btn-home-start:hover,
+.btn-home-start:focus-visible {
+  transform: translateY(-3px) scale(1.035);
+  outline: none;
+  background: linear-gradient(180deg, #ff7c9d, #f30075 48%, #970064);
+  box-shadow: 0 0 0 3px rgba(26, 3, 31, 0.95), 0 0 34px rgba(255, 230, 91, 0.95);
+}
+
+@keyframes home-start-pulse {
+  from { filter: brightness(0.92); }
+  to { filter: brightness(1.18); }
+}
+
 .overlay-screen {
   position: absolute;
   top: 0;
@@ -408,6 +517,118 @@ body {
 #start-screen {
   background: linear-gradient(180deg, rgba(4, 6, 12, 0.48), rgba(4, 6, 12, 0.7));
   backdrop-filter: blur(1px);
+  justify-content: center;
+  padding: clamp(8px, 1.8vh, 20px) clamp(12px, 2vw, 24px);
+  overflow: hidden;
+}
+
+/* A arte de Odisseu já teve sua vez na capa anterior. Na seleção, cada
+   pixel vertical fica reservado para os personagens e para começar a partida. */
+#start-screen .home-cover-banner {
+  display: none;
+}
+
+#start-screen .game-title-logo {
+  font-size: clamp(25px, 4.8vh, 38px);
+  margin-bottom: clamp(3px, 0.7vh, 8px);
+}
+
+#start-screen .subtitle {
+  font-size: clamp(7px, 1.45vh, 12px);
+  margin-bottom: clamp(6px, 1.2vh, 16px);
+}
+
+#start-screen .mode-selector-container {
+  gap: clamp(8px, 1.4vw, 16px);
+  margin-bottom: clamp(7px, 1.2vh, 18px);
+}
+
+#start-screen .mode-btn {
+  font-size: clamp(7px, 1.22vh, 10px);
+  padding: clamp(7px, 1.45vh, 12px) clamp(10px, 2.2vw, 24px);
+}
+
+#start-screen .character-select-section {
+  margin-bottom: clamp(6px, 1.1vh, 16px);
+}
+
+#start-screen .char-select-header {
+  margin-bottom: clamp(4px, 0.85vh, 12px);
+}
+
+#start-screen .char-card {
+  padding: clamp(6px, 1.25vh, 12px) clamp(6px, 1.15vw, 10px);
+}
+
+#start-screen .char-avatar-box {
+  width: clamp(50px, 9.5vh, 72px);
+  height: clamp(54px, 10.5vh, 80px);
+  margin-bottom: clamp(4px, 0.85vh, 8px);
+}
+
+#start-screen .char-name-row {
+  margin-bottom: clamp(2px, 0.5vh, 4px);
+}
+
+#start-screen .char-perk {
+  min-height: 0;
+  margin: clamp(3px, 0.7vh, 6px) 0;
+}
+
+#start-screen .char-stats {
+  margin-top: clamp(2px, 0.5vh, 4px);
+  gap: clamp(1px, 0.45vh, 3px);
+}
+
+#start-screen .menu-card {
+  width: min(620px, 100%);
+  padding: clamp(7px, 1.3vh, 14px) clamp(10px, 2vw, 24px);
+  margin-bottom: clamp(5px, 1vh, 16px);
+}
+
+#start-screen .menu-card h3 {
+  font-size: clamp(7px, 1.25vh, 10px) !important;
+  margin-bottom: clamp(2px, 0.5vh, 6px) !important;
+}
+
+#start-screen .controls-grid {
+  gap: clamp(5px, 1vh, 12px) clamp(8px, 2vw, 24px);
+  font-size: clamp(6px, 1.15vh, 9px);
+  line-height: 1.42;
+  margin-top: clamp(4px, 0.8vh, 12px);
+}
+
+#start-screen .key-badge {
+  padding: clamp(1px, 0.25vh, 2px) clamp(3px, 0.55vw, 6px);
+  margin-right: clamp(2px, 0.35vw, 4px);
+}
+
+#start-screen .btn-arcade {
+  font-size: clamp(9px, 1.7vh, 14px);
+  padding: clamp(8px, 1.45vh, 14px) clamp(15px, 2.8vw, 28px);
+  margin: clamp(5px, 1vh, 14px) 0 0;
+}
+
+@media (max-height: 610px) {
+  #start-screen .game-title-logo { font-size: 23px; }
+  #start-screen .subtitle { display: none; }
+  #start-screen .char-perk { font-size: 5.5px; line-height: 1.23; }
+  #start-screen .char-name { font-size: 8px; }
+  #start-screen .char-role { font-size: 6px; }
+  #start-screen .char-select-tag { font-size: 6px; }
+  #start-screen .char-badge-special { font-size: 5.5px; padding: 2px 4px; }
+  #start-screen .stat-bar-group { font-size: 5px; }
+  #start-screen .stat-bar { height: 3px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  #start-screen .menu-card { display: none; }
+  #start-screen .game-title-logo { font-size: 20px; }
+  #start-screen .mode-selector-container { margin-bottom: 5px; }
+  #start-screen .character-select-section { margin-bottom: 4px; }
+  #start-screen .char-avatar-box { width: 42px; height: 44px; }
+  #start-screen .char-perk { display: none; }
+  #start-screen .char-card { padding: 4px 6px; }
 }
 
 .overlay-screen::-webkit-scrollbar {

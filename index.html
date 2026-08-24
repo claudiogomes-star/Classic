@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cyber Slug: Neon Front - Arcade Action</title>
+  <title>Cyber Classica: Neon Front - Arcade Action</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -128,9 +128,20 @@
       </div>
     </div>
 
-    <!-- Tela de Início / Menu Principal -->
-    <div id="start-screen" class="overlay-screen">
-      <h1 class="game-title-logo">CYBER SLUG</h1>
+    <!-- Home Page: capa enviada pelo jogador -->
+    <div id="home-screen" class="home-screen">
+      <img src="assets/cyber-classica-home.png" alt="Cyber Classica: capa arcade neon com referências culturais" class="home-cover-image">
+      <div class="home-cover-shade"></div>
+      <div class="home-launch-panel">
+        <span class="home-launch-tag">ARCADE • NOSTALGIA • LENDA</span>
+        <button id="btn-open-game" class="btn-home-start">▶ INICIAR JOGO</button>
+        <span class="home-launch-hint">ESCOLHA SEU HERÓI E ENTRE NA MISSÃO</span>
+      </div>
+    </div>
+
+    <!-- Tela de Seleção / Menu Principal -->
+    <div id="start-screen" class="overlay-screen" style="display: none;">
+      <h1 class="game-title-logo">CYBER CLASSICA</h1>
       <p class="subtitle">NEON FRONT // TACTICAL ARCADE ACTION</p>
       <div class="home-cover-banner" aria-label="Odisseu e a tropa de assalto">
         <span class="cover-rank">⚔ ODYSSEUS COMMAND ⚔</span>

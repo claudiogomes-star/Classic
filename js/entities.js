@@ -1953,7 +1953,10 @@ class DragonCinematic {
       this.scale = Math.max(0.7, this.scale - 0.7 * dt);
       if (this.stateTime >= 1.15) {
         this.state = 'DONE';
-        game.missionComplete();
+        // Centraliza a saída da cinemática para limpar os efeitos e garantir
+        // que a tela de vitória sempre apareça, mesmo após um impacto pesado.
+        if (game.finishDragonFinale) game.finishDragonFinale();
+        else game.missionComplete();
       }
     }
   }
