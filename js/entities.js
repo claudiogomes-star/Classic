@@ -54,17 +54,30 @@ class Player {
     this.attackDirection = 'vertical'; // 'vertical' ou 'horizontal'
     this.isExecuting = false; // Flag de execução aérea
     this.executionPhase = 0; // 0=subindo, 1=no topo, 2=descendo
+    this.executionDirection = 1;
+    this.coyoteTimer = 0;
+    this.jumpBufferTimer = 0;
 
     // Aplicar Especialidades por Personagem
     if (this.characterId === 'claudio') {
       // Claudio: Nordic Warrior & Wielder of the Leviathan Axe
       this.speed = 5.2; // Mais rápido e ágil
       this.grenades = 15;
-      this.meleeDamage = 180; // Dano ÉPICO aumentado
-      this.meleeRange = 70; // Alcance ainda maior
+      this.meleeDamage = 220; // Dano ÉPICO de Machado
+      this.meleeRange = 75; // Alcance estendido
       this.hasWarPaint = true;
       this.weapon = 'AXE'; // Claudio empunha o Machado Nórdico!
       this.ammo = Infinity; // Machado não gasta munição
+    } else if (this.characterId === 'jessica') {
+      // Jessica: Elite Phantom Huntress / Bow Specialist
+      this.speed = 5.2; // Alta agilidade e reflexos rápidos
+      this.grenades = 12;
+      this.meleeDamage = 95;
+      this.meleeRange = 45;
+      this.weapon = 'BOW'; // Jessica inicia com o Arco Tático Cyber!
+      this.ammo = 180;
+      this.pickupMultiplier = 1.35;
+      this.bowCombo = 0;
     } else if (this.characterId === 'marco') {
       // Marco: Burst Fire (Maior cadência de tiro)
       this.speed = 4.2;
@@ -148,7 +161,7 @@ class Player {
     let moveLeft, moveRight, lookUp, lookDown, jumpPressed, shootPressed, bombPressed, enterPressed, executionPressed;
     
     if (this.playerIndex === 0) {
-      // Jogador 1
+      // Jogador 1 (WASD + J/K/L/R/E)
       moveLeft = input.isDown('left');
       moveRight = input.isDown('right');
       lookUp = input.isDown('up');
@@ -159,23 +172,34 @@ class Player {
       enterPressed = input.isPressed('enter');
       executionPressed = input.isPressed('execution');
     } else {
-      // Jogador 2
-      moveLeft = input.keys['ArrowLeft'];
-      moveRight = input.keys['ArrowRight'];
-      lookUp = input.keys['ArrowUp'];
-      lookDown = input.keys['ArrowDown'];
-      jumpPressed = input.pressed['KeyU'] || input.pressed['Numpad1'];
-      shootPressed = input.keys['KeyI'] || input.keys['Numpad2'];
-      bombPressed = input.pressed['KeyO'] || input.pressed['Numpad3'];
-      enterPressed = input.pressed['KeyP'] || input.pressed['Numpad0'];
-      executionPressed = false; // P2 não tem execução ainda
+      // Jogador 2 (Setas + 1/2/3/4/0 ou Numpad)
+      moveLeft = input.isDown('p2_left');
+      moveRight = input.isDown('p2_right');
+      lookUp = input.isDown('p2_up');
+      lookDown = input.isDown('p2_down');
+      jumpPressed = input.isPressed('p2_jump');
+      shootPressed = input.isDown('p2_shoot');
+      bombPressed = input.isPressed('p2_bomb');
+      enterPressed = input.isPressed('p2_enter');
+      executionPressed = input.isPressed('p2_execution');
     }
+
+    // Pequena tolerância no pulo deixa o controle mais justo: o comando ainda
+    // é aceito logo após sair de uma plataforma ou pouco antes de aterrissar.
+    this.coyoteTimer = this.onGround ? 0.1 : Math.max(0, this.coyoteTimer - dt);
+    if (jumpPressed) this.jumpBufferTimer = 0.12;
+    else this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - dt);
 
     // Agachamento
     this.isCrouching = lookDown && this.onGround;
 
     // Movimentação Horizontal
-    if (!this.isCrouching) {
+    if (this.isExecuting) {
+      // A execução mantém o avanço no ar; antes, o personagem perdia o dash
+      // no quadro seguinte caso o jogador soltasse a tecla de direção.
+      this.vx = this.executionDirection * 8.5;
+      this.facing = this.executionDirection;
+    } else if (!this.isCrouching) {
       if (moveLeft && !moveRight) {
         this.vx = -this.speed;
         this.facing = -1;
@@ -194,9 +218,11 @@ class Player {
     this.aimY = lookUp ? -1 : (lookDown ? 1 : 0);
 
     // Pulo
-    if (jumpPressed && this.onGround) {
+    if (this.jumpBufferTimer > 0 && this.coyoteTimer > 0 && !this.isExecuting) {
       this.vy = this.jumpForce;
       this.onGround = false;
+      this.coyoteTimer = 0;
+      this.jumpBufferTimer = 0;
       audio.playJump();
       game.spawnDust(this.x + this.width / 2, this.y + this.height);
     }
@@ -212,6 +238,15 @@ class Player {
     this.y += this.vy;
     this.onGround = false;
     game.resolveVerticalCollision(this);
+
+    // Efeito de Execução Aérea em Voo e Impacto no Solo
+    if (this.isExecuting) {
+      game.spawnBlood(this.x + this.width / 2, this.y + this.height / 2);
+      game.spawnSpark(this.x + this.width / 2, this.y + this.height / 2);
+      if (this.onGround && this.vy >= 0) {
+        this.finishExecutionImpact(game);
+      }
+    }
 
     // Ação: Atirar ou Desferir Machado
     if (shootPressed) {
@@ -246,10 +281,14 @@ class Player {
       this.tryEnterSlug(game);
     }
 
-    // Ação: EXECUÇÃO AÉREA - Pular e dividir inimigo (tecla R)
+    // Ação: EXECUÇÃO AÉREA (Tecla R para 1P, Tecla 4 para 2P)
     if (executionPressed) {
-      if (this.weapon === 'AXE' && this.onGround && !this.inSlug) {
-        this.tryAxeExecutionJump(game);
+      if (!this.inSlug) {
+        if (this.weapon === 'AXE' || this.characterId === 'claudio') {
+          this.tryAxeExecutionJump(game);
+        } else if (this.weapon === 'BOW' || this.characterId === 'jessica') {
+          this.tryBowSpecialRain(game);
+        }
       }
     }
   }
@@ -525,216 +564,128 @@ class Player {
     return true;
   }
 
-  // === EXECUÇÃO AÉREA DEVASTADORA - PULAR E DIVIDIR O INIMIGO AO MEIO ===
+  // === EXECUÇÃO AÉREA DEVASTADORA (TECLA R / 4) - PULAR E DIVIDIR O INIMIGO AO MEIO ===
   tryAxeExecutionJump(game) {
     if (this.meleeTimer > 0 || this.isExecuting) return false;
 
-    // Procurar inimigo mais próximo na frente
-    const executionRange = 120;
-    let targetEnemy = null;
-    let minDist = executionRange;
-
-    game.enemies.forEach(e => {
-      const dx = (e.x + e.width / 2) - (this.x + this.width / 2);
-      const dist = Math.hypot(dx, (e.y + e.height / 2) - (this.y + this.height / 2));
-      
-      // Inimigo tem que estar na frente
-      if ((this.facing === 1 && dx > 0) || (this.facing === -1 && dx < 0)) {
-        if (dist < minDist) {
-          minDist = dist;
-          targetEnemy = e;
-        }
-      }
-    });
-
-    // Boss também pode ser executado
-    if (game.boss && !game.boss.isDead) {
-      const dx = (game.boss.x + game.boss.width / 2) - (this.x + this.width / 2);
-      const dist = Math.hypot(dx, (game.boss.y + game.boss.height / 2) - (this.y + this.height / 2));
-      if (dist < executionRange + 50 && ((this.facing === 1 && dx > 0) || (this.facing === -1 && dx < 0))) {
-        targetEnemy = game.boss;
-      }
-    }
-
-    if (!targetEnemy) {
-      game.addFloatingText(this.x, this.y - 15, 'Sem alvo!', '#888888', 10);
-      return false;
-    }
-
-    // ATIVAR MODO DE EXECUÇÃO!
     this.isExecuting = true;
-    this.executionPhase = 0;
-    this.meleeTimer = 2.0; // Cooldown longo
+    this.isAttacking = true;
+    this.meleeAttackTime = 1.2;
+    this.meleeTimer = 1.0;
 
-    // SOM ÉPICO DE PREPARAÇÃO
+    // Salto ágil para frente
+    this.vy = -13.5;
+    this.executionDirection = this.facing;
+    this.vx = this.executionDirection * 8.5;
+    this.onGround = false;
+
     audio.playAxeSwing();
-    
-    // FASE 1: PULAR PARA CIMA
-    this.vy = -14; // Pulo alto
-    this.vx = this.facing * 3; // Movimento horizontal suave
-    
-    game.addFloatingText(this.x, this.y - 20, '⚡ EXECUÇÃO! ⚡', '#ff0000', 16);
-    game.triggerScreenShake(5, 0.3);
+    game.triggerScreenShake(8, 0.25);
+    game.addFloatingText(this.x + this.width / 2, this.y - 25, '⚡ DEGOLAR! ⚡', '#ff0000', 16);
 
-    // Partículas de preparação
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 25; i++) {
       game.particles.push({
         type: 'spark',
         x: this.x + this.width / 2,
         y: this.y + this.height,
-        vx: (Math.random() - 0.5) * 8,
-        vy: -Math.random() * 10,
+        vx: (Math.random() - 0.5) * 10,
+        vy: -Math.random() * 12,
+        life: 0.5,
+        maxLife: 0.5
+      });
+    }
+    return true;
+  }
+
+  finishExecutionImpact(game) {
+    this.isExecuting = false;
+    this.isAttacking = false;
+    this.vx = 0;
+
+    audio.playExplosion(true);
+    audio.playAxeHit();
+    game.triggerScreenShake(18, 0.45);
+
+    const impactX = this.x + this.facing * 35;
+    const impactY = this.y + this.height;
+
+    // Explosão massiva de impacto
+    game.spawnExplosion(impactX, impactY, 70);
+
+    // Buscar inimigos no raio do corte
+    const cleaveRadius = 140;
+    let hitCount = 0;
+
+    game.enemies.forEach(e => {
+      const dist = Math.hypot((e.x + e.width / 2) - impactX, (e.y + e.height / 2) - impactY);
+      if (dist < cleaveRadius) {
+        const damage = 650; // Dano massivo que parte ao meio
+        if (game.addExecutionSplit) game.addExecutionSplit(e, this.facing);
+        e.takeDamage(damage, Math.atan2(0, this.facing), game);
+        hitCount++;
+
+        // Efeito visual de corte vertical e sangue jorrando dos dois lados
+        const ex = e.x + e.width / 2;
+        const ey = e.y + e.height / 2;
+        for (let i = 0; i < 35; i++) {
+          const side = (i % 2 === 0) ? -1 : 1;
+          game.particles.push({
+            type: 'blood',
+            x: ex,
+            y: ey + (Math.random() - 0.5) * e.height,
+            vx: side * (6 + Math.random() * 10),
+            vy: -4 - Math.random() * 8,
+            radius: 4 + Math.random() * 3,
+            life: 0.8,
+            maxLife: 0.8
+          });
+        }
+      }
+    });
+
+    if (game.boss && !game.boss.isDead) {
+      const bDist = Math.hypot((game.boss.x + game.boss.width / 2) - impactX, (game.boss.y + game.boss.height / 2) - impactY);
+      if (bDist < cleaveRadius + 80) {
+        game.boss.takeDamage(500, game);
+        hitCount++;
+      }
+    }
+
+    if (hitCount > 0) {
+      game.addFloatingText(impactX, impactY - 50, '💀 DIVIDIDO AO MEIO! 💀', '#ff0000', 18);
+    }
+
+    // Rachadura e faíscas no chão
+    for (let i = 0; i < 35; i++) {
+      const angle = (Math.random() * Math.PI) - Math.PI / 2;
+      game.particles.push({
+        type: 'spark',
+        x: impactX,
+        y: impactY,
+        vx: Math.cos(angle) * (8 + Math.random() * 12),
+        vy: Math.sin(angle) * (8 + Math.random() * 12),
         life: 0.6,
         maxLife: 0.6
       });
     }
+  }
 
-    // Controlar a execução em fases
-    let executionTimer = 0;
-    const executionInterval = setInterval(() => {
-      if (!this.isExecuting) {
-        clearInterval(executionInterval);
-        return;
-      }
+  tryBowSpecialRain(game) {
+    if (this.shootCooldown > 0) return false;
+    this.shootCooldown = 0.8;
 
-      executionTimer += 0.05;
+    audio.playBowSpecial();
+    game.triggerScreenShake(8, 0.3);
+    game.addFloatingText(this.x, this.y - 25, '🏹 CHUVA DE FLECHAS! 🏹', '#00d9ff', 15);
 
-      // FASE 2: NO TOPO (0.3s depois)
-      if (executionTimer > 0.3 && this.executionPhase === 0) {
-        this.executionPhase = 1;
-        
-        // Travar no ar por um momento
-        this.vy = 0;
-        this.vx = 0;
-        
-        audio.playAxeHit();
-        
-        setTimeout(() => {
-          if (!this.isExecuting) return;
-          
-          // FASE 3: DESCER COM MACHADO!
-          this.executionPhase = 2;
-          this.vy = 18; // Descida RÁPIDA
-          
-          // Mirar no inimigo
-          const targetX = targetEnemy.x + targetEnemy.width / 2;
-          this.vx = (targetX - (this.x + this.width / 2)) * 0.3;
-          
-          audio.playAxeSwing();
-          
-          // Rastro vermelho ao descer
-          const trailInterval = setInterval(() => {
-            if (this.executionPhase !== 2 || !this.isExecuting) {
-              clearInterval(trailInterval);
-              return;
-            }
-            
-            for (let i = 0; i < 3; i++) {
-              game.particles.push({
-                type: 'blood',
-                x: this.x + this.width / 2,
-                y: this.y + this.height / 2 - 10,
-                vx: (Math.random() - 0.5) * 4,
-                vy: Math.random() * 3,
-                radius: 4,
-                life: 0.4,
-                maxLife: 0.4,
-                color: '#ff0000'
-              });
-            }
-          }, 50);
-          
-        }, 200);
-      }
-
-      // FASE 4: IMPACTO!
-      if (this.executionPhase === 2 && this.onGround) {
-        this.isExecuting = false;
-        this.executionPhase = 0;
-        clearInterval(executionInterval);
-        
-        // EXPLOSÃO MASSIVA!
-        audio.playExplosion(true);
-        game.triggerScreenShake(15, 0.5);
-        
-        // Verificar se acertou o inimigo
-        const impactDist = Math.hypot((targetEnemy.x + targetEnemy.width / 2) - (this.x + this.width / 2), (targetEnemy.y + targetEnemy.height / 2) - (this.y + this.height / 2));
-        
-        if (impactDist < 100) {
-          // ACERTOU! DIVIDIR O INIMIGO AO MEIO!
-          const executionDamage = (this.meleeDamage || 180) * 3; // TRIPLO DE DANO!
-          
-          if (targetEnemy.takeDamage) {
-            targetEnemy.takeDamage(executionDamage, Math.atan2(0, this.facing), game);
-          }
-          
-          // EFEITO VISUAL DE DIVISÃO AO MEIO
-          const centerX = targetEnemy.x + targetEnemy.width / 2;
-          const centerY = targetEnemy.y + targetEnemy.height / 2;
-          
-          // Linha de corte vertical brilhante
-          for (let y = -30; y <= 30; y += 3) {
-            game.particles.push({
-              type: 'spark',
-              x: centerX,
-              y: centerY + y,
-              vx: 0,
-              vy: 0,
-              life: 0.3,
-              maxLife: 0.3
-            });
-          }
-          
-          // Explosão de sangue dos dois lados
-          for (let i = 0; i < 30; i++) {
-            const side = i < 15 ? -1 : 1;
-            game.particles.push({
-              type: 'blood',
-              x: centerX,
-              y: centerY + (Math.random() - 0.5) * targetEnemy.height,
-              vx: side * (5 + Math.random() * 10),
-              vy: -5 - Math.random() * 8,
-              radius: 4 + Math.random() * 3,
-              life: 0.8,
-              maxLife: 0.8,
-              color: '#cc0000'
-            });
-          }
-          
-          game.addFloatingText(centerX, centerY - 40, `💀 EXECUTADO! ${executionDamage} 💀`, '#ff0000', 18);
-          
-        } else {
-          // Errou - apenas impacto no chão
-          game.addFloatingText(this.x, this.y - 20, 'ERROU!', '#888888', 12);
-        }
-        
-        // Onda de choque no chão
-        const impactX = this.x + this.width / 2;
-        const impactY = this.y + this.height;
-        
-        game.spawnExplosion(impactX, impactY, 60);
-        
-        for (let i = 0; i < 40; i++) {
-          const angle = (Math.random() * Math.PI) - Math.PI / 2;
-          game.particles.push({
-            type: 'spark',
-            x: impactX,
-            y: impactY,
-            vx: Math.cos(angle) * (8 + Math.random() * 12),
-            vy: Math.sin(angle) * (8 + Math.random() * 12),
-            life: 0.6,
-            maxLife: 0.6
-          });
-        }
-        
-        // Rachadura no chão
-        for (let i = 0; i < 15; i++) {
-          game.spawnSmoke(impactX + (Math.random() - 0.5) * 80, impactY, 12);
-        }
-      }
-      
-    }, 50);
-
+    // Dispara 10 flechas de plasma do céu caindo em leque
+    for (let i = 0; i < 10; i++) {
+      setTimeout(() => {
+        const arrowX = this.x - 100 + i * 50;
+        game.projectiles.push(new Projectile(arrowX, -30, (Math.random() - 0.5) * 2, 16, 'arrow', 60, true, 8, 1.5));
+        audio.playBowShot();
+      }, i * 60);
+    }
     return true;
   }
 
@@ -744,6 +695,7 @@ class Player {
     // Definir cadência por arma
     let fireDelay = 0.18;
     switch (this.weapon) {
+      case 'BOW': fireDelay = 0.14; break; // Alta cadência do Arco Tático
       case 'HMG': fireDelay = 0.08; break;
       case 'SHOTGUN': fireDelay = 0.45; break;
       case 'ROCKET': fireDelay = 0.35; break;
@@ -787,12 +739,12 @@ class Player {
     this.spawnWeaponProjectiles(game, spawnX, spawnY, ndx, ndy);
 
     // Ejetar cartucho de latão (se for arma de fogo)
-    if (this.weapon !== 'AXE') {
+    if (this.weapon !== 'AXE' && this.weapon !== 'BOW') {
       game.spawnCasing(this.x + this.width / 2, this.y + 16, -this.facing);
     }
 
     // Consumir Munição
-    if (this.weapon !== 'PISTOL') {
+    if (this.weapon !== 'PISTOL' && this.weapon !== 'AXE') {
       this.ammo--;
       if (this.ammo <= 0) {
         this.weapon = 'PISTOL';
@@ -806,6 +758,28 @@ class Player {
     const speed = 14;
 
     switch (this.weapon) {
+      case 'BOW':
+        // Arco Tático da Jessica: Flechas Perfurantes & Rajada Tripla
+        audio.playBowShot();
+        this.bowCombo = (this.bowCombo || 0) + 1;
+        if (this.bowCombo % 3 === 0) {
+          // Rajada Tripla Especial em Leque
+          audio.playBowSpecial();
+          for (let i = -1; i <= 1; i++) {
+            const spread = i * 0.12;
+            const adx = dx * Math.cos(spread) - dy * Math.sin(spread);
+            const ady = dx * Math.sin(spread) + dy * Math.cos(spread);
+            game.projectiles.push(new Projectile(sx, sy, adx * 22, ady * 22, 'arrow', 85, true, 5, 1.6));
+          }
+          game.triggerScreenShake(3, 0.08);
+          game.addFloatingText(sx, sy - 20, '🏹 TRIPLE ARROW!', '#00d9ff', 12);
+        } else {
+          // Flecha Única Rápida e Perfurante
+          game.projectiles.push(new Projectile(sx, sy, dx * 24, dy * 24, 'arrow', 75, true, 5, 1.8));
+          game.triggerScreenShake(1.5, 0.04);
+        }
+        break;
+
       case 'HMG':
         audio.playShootHMG();
         const spreadAngle = (Math.random() - 0.5) * 0.08;
@@ -860,6 +834,18 @@ class Player {
   throwGrenade(game) {
     if (this.grenades <= 0) return;
     this.grenades--;
+
+    if (this.characterId === 'jessica' && this.weapon === 'BOW') {
+      // Jessica dispara uma Flecha Explosiva Tática (Bomb Arrow)
+      audio.playBowShot();
+      audio.playBowSpecial();
+      const gvx = this.facing * 18;
+      const gvy = -3;
+      game.projectiles.push(new Projectile(this.x + this.width / 2, this.y + 12, gvx, gvy, 'bomb_arrow', 200, true, 7, 2.0));
+      game.addFloatingText(this.x, this.y - 15, '💥 BOMB ARROW!', '#00d9ff', 12);
+      return;
+    }
+
     const gvx = this.facing * 7 + this.vx * 0.5;
     const gvy = -7;
     game.projectiles.push(new Projectile(this.x + this.width / 2, this.y + 10, gvx, gvy, 'grenade', 140, true, 6, 1.8, false, true));
@@ -881,8 +867,8 @@ class Player {
       audio.playMeleeSlash();
       const dmg = this.meleeDamage || 75;
       nearbyEnemy.takeDamage(dmg, Math.atan2(0, this.facing), game);
-      const slashText = 'SLASH!';
-      const slashColor = '#00d9ff';
+      const slashText = this.characterId === 'jessica' ? 'PHANTOM KICK!' : 'SLASH!';
+      const slashColor = this.characterId === 'jessica' ? '#c084fc' : '#00d9ff';
       game.addFloatingText(nearbyEnemy.x, nearbyEnemy.y - 10, slashText, slashColor);
       game.triggerScreenShake(3, 0.08);
       return true;
@@ -917,6 +903,7 @@ class Player {
       this.slugRef = slug;
       slug.isOccupied = true;
       slug.driverCharacterId = this.characterId;
+      slug.driverPlayerIndex = this.playerIndex;
 
       // Se o piloto for Tarma (Slug Master), aplicar bônus de tanque
       if (this.slugBonus && !slug.tarmaBuffed) {
@@ -980,15 +967,21 @@ class Player {
       this.weapon = 'AXE';
       this.ammo = Infinity; // Machado não usa munição
       this.hasWarPaint = true;
+      this.grenades = 15;
+    } else if (this.characterId === 'jessica') {
+      this.weapon = 'BOW';
+      this.ammo = 180;
+      this.grenades = 12;
     } else if (this.characterId === 'fio') {
       this.weapon = 'HMG';
       this.ammo = 150;
+      this.grenades = 10;
     } else {
       this.weapon = 'PISTOL';
       this.ammo = Infinity;
+      this.grenades = 10;
     }
 
-    this.grenades = this.characterId === 'claudio' ? 15 : 10;
     this.isInvulnerable = true;
     this.invulnerableTimer = 2.5;
     this.x = game.camera.x + 80 + (this.playerIndex * 40);
@@ -1001,23 +994,22 @@ class Player {
     // Claudio NÃO pode trocar o Machado Nórdico por outras armas!
     if (this.characterId === 'claudio' && type !== 'AXE') {
       game.addFloatingText(this.x, this.y - 20, 'MACHADO ETERNO!', '#ffcc00', 11);
-      audio.announce("LEVIATHAN AXE CANNOT BE REPLACED");
+      audio.announce("LEVIATHAN AXE");
       return;
     }
 
     this.weapon = type;
     if (type === 'AXE') {
       this.hasWarPaint = true;
-      this.ammo = Infinity;
-    } else {
-      const finalAmmo = Math.round(ammoCount * (this.pickupMultiplier || 1.0));
-      this.ammo = finalAmmo;
     }
+    const finalAmmo = Math.round(ammoCount * (this.pickupMultiplier || 1.0));
+    this.ammo = finalAmmo;
     this.score += 500;
 
     let announceName = "OK!";
     switch (type) {
       case 'AXE': announceName = "LEVIATHAN AXE"; audio.playAxeHit(); break;
+      case 'BOW': announceName = "CYBER BOW"; audio.playBowSpecial(); break;
       case 'HMG': announceName = "HEAVY MACHINE GUN"; break;
       case 'SHOTGUN': announceName = "SHOTGUN"; break;
       case 'ROCKET': announceName = "ROCKET LAUNCHER"; break;
@@ -1031,28 +1023,30 @@ class Player {
 }
 
 // ==========================================
-// 2. INIMIGOS E TROPAS REBELDES
+// 2. INIMIGOS E TROPAS ADAPTADAS POR BIOMA
 // ==========================================
 class Enemy {
-  constructor(x, y, type = 'soldier') {
+  constructor(x, y, type = 'soldier', biome = 'tokyo') {
     this.id = Math.random();
     this.x = x;
     this.y = y;
     this.type = type;
+    this.biome = biome; // 'tokyo', 'brazil', 'europe', 'egypt'
     this.facing = -1;
     this.vx = 0;
     this.vy = 0;
     this.onGround = false;
     this.flashTimer = 0;
-    this.shootTimer = 1.0 + Math.random() * 1.5;
+    this.shootTimer = 0.8 + Math.random() * 1.5;
+    this.animTime = Math.random() * 10;
 
-    // Configurações por tipo
+    // Configurações por tipo e bioma
     switch (type) {
       case 'shield':
         this.width = 34;
         this.height = 46;
-        this.hp = 90;
-        this.maxHp = 90;
+        this.hp = biome === 'egypt' ? 120 : (biome === 'europe' ? 100 : 90);
+        this.maxHp = this.hp;
         this.speed = 1.6;
         this.scoreValue = 300;
         break;
@@ -1060,8 +1054,8 @@ class Enemy {
       case 'rocket_trooper':
         this.width = 30;
         this.height = 46;
-        this.hp = 45;
-        this.maxHp = 45;
+        this.hp = biome === 'egypt' ? 60 : 45;
+        this.maxHp = this.hp;
         this.speed = 1.8;
         this.scoreValue = 250;
         break;
@@ -1069,8 +1063,8 @@ class Enemy {
       case 'drone':
         this.width = 36;
         this.height = 28;
-        this.hp = 50;
-        this.maxHp = 50;
+        this.hp = biome === 'egypt' ? 65 : 50;
+        this.maxHp = this.hp;
         this.speed = 2.4;
         this.scoreValue = 400;
         this.baseY = y;
@@ -1079,8 +1073,8 @@ class Enemy {
       default: // soldier
         this.width = 28;
         this.height = 44;
-        this.hp = 35;
-        this.maxHp = 35;
+        this.hp = biome === 'egypt' ? 45 : (biome === 'europe' ? 40 : 35);
+        this.maxHp = this.hp;
         this.speed = 2.2;
         this.scoreValue = 150;
         break;
@@ -1088,6 +1082,7 @@ class Enemy {
   }
 
   update(dt, player, game) {
+    this.animTime += dt;
     if (this.flashTimer > 0) this.flashTimer -= dt;
     this.shootTimer -= dt;
 
@@ -1100,34 +1095,31 @@ class Enemy {
     }
 
     if (this.type === 'drone') {
-      // IA do Drone: voo senoidal e tracking
+      // IA do Drone: voo senoidal e tracking suave
       this.x += Math.sign(distToPlayer) * this.speed * 0.8;
       this.y = this.baseY + Math.sin(game.time * 4 + this.id) * 35;
 
-      if (this.shootTimer <= 0 && absDist < 450) {
-        this.shootTimer = 2.2 + Math.random();
-        // Disparo de projétil de plasma descendente
+      if (this.shootTimer <= 0 && absDist < 480) {
+        this.shootTimer = 2.0 + Math.random();
         const angle = Math.atan2((player.y + 20) - this.y, (player.x + 15) - this.x);
-        game.projectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height, Math.cos(angle) * 7, Math.sin(angle) * 7, 'bullet', 15, false, 4));
+        game.projectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height, Math.cos(angle) * 7.5, Math.sin(angle) * 7.5, 'bullet', 15, false, 4));
         audio.playShootPistol();
       }
       return;
     }
 
     // IA Terrestre (Soldier, Shield, Rocket)
-    if (absDist > 240) {
-      // Aproximar-se do jogador
+    if (absDist > 220) {
       this.vx = this.facing * this.speed;
-    } else if (absDist < 90 && this.type !== 'shield') {
-      // Recuar se estiver muito perto
+    } else if (absDist < 80 && this.type !== 'shield') {
       this.vx = -this.facing * this.speed * 0.7;
     } else {
       this.vx = 0;
     }
 
     // Ataque do Inimigo
-    if (this.shootTimer <= 0 && absDist < 500) {
-      this.shootTimer = 1.8 + Math.random() * 1.2;
+    if (this.shootTimer <= 0 && absDist < 520) {
+      this.shootTimer = 1.6 + Math.random() * 1.2;
       this.performAttack(player, game);
     }
 
@@ -1148,17 +1140,13 @@ class Enemy {
     const sy = this.y + 18;
 
     if (this.type === 'rocket_trooper') {
-      // Lança míssil na direção do jogador
-      game.projectiles.push(new Projectile(sx, sy, this.facing * 7, 0, 'rocket', 25, false, 5, 3.0, true));
+      game.projectiles.push(new Projectile(sx, sy, this.facing * 7.5, 0, 'rocket', 25, false, 5, 3.0, true));
       audio.playShootRocket();
     } else if (this.type === 'shield') {
-      // Pistola rápida
-      game.projectiles.push(new Projectile(sx, sy, this.facing * 8, 0, 'bullet', 12, false, 3.5));
+      game.projectiles.push(new Projectile(sx, sy, this.facing * 8.5, 0, 'bullet', 12, false, 3.5));
       audio.playShootPistol();
     } else {
-      // Soldado normal: tiro de rifle ou granada ocasional
       if (Math.random() < 0.25) {
-        // Arremesso de granada inimiga
         game.projectiles.push(new Projectile(sx, sy - 8, this.facing * 5, -6, 'grenade', 30, false, 5, 2.0, false, true));
       } else {
         game.projectiles.push(new Projectile(sx, sy, this.facing * 9, 0, 'bullet', 14, false, 3.5));
@@ -1168,7 +1156,6 @@ class Enemy {
   }
 
   takeDamage(amount, bulletAngle, game) {
-    // Escudo bloqueia 85% de dano frontal
     if (this.type === 'shield') {
       const isFromFront = (this.facing === 1 && Math.cos(bulletAngle) < 0) || (this.facing === -1 && Math.cos(bulletAngle) > 0);
       if (isFromFront) {
@@ -1188,113 +1175,564 @@ class Enemy {
 
   die(game) {
     this.hp = 0;
-    game.player.score += this.scoreValue;
+    game.players.forEach(p => { p.score += this.scoreValue; });
     game.addFloatingText(this.x, this.y - 12, `+${this.scoreValue}`, '#ffcc00');
     game.spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, 28);
     audio.playExplosion(false);
 
-    // Chance de dropar item de comida para pontuação
-    if (Math.random() < 0.18) {
+    if (Math.random() < 0.2) {
       game.pickups.push(new Pickup(this.x, this.y, 'FOOD'));
     }
   }
 }
 
 // ==========================================
-// 3. CHEFÃO GIGANTE (GOLIATH MEGA-TANK)
+// 3. CHEFÃO TITÃ (MECHAGODZILLA DINÂMICO HD)
 // ==========================================
 class Boss {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.width = 240;
-    this.height = 140;
-    this.hp = 1200;
-    this.maxHp = 1200;
+    this.baseY = y;
+    this.width = 260; // Titã Imponente e Gigantesco
+    this.height = 240;
+    // Vida calibrada para uma luta de chefe: ataques especiais ainda causam
+    // impacto, mas não encerram a batalha em poucos segundos.
+    this.hp = 6500;
+    this.maxHp = 6500;
     this.flashTimer = 0;
-    this.attackTimer = 2.0;
-    this.cannonAngle = 0;
     this.phase = 1;
     this.isDead = false;
+    this.lastAttack = null;
+
+    // Máquina de Estados do MechaGodzilla
+    // 'INTRO', 'IDLE', 'WALK', 'RUSH', 'PREPARE_LASER', 'FIRE_LASER', 'RECOIL_LASER', 'MISSILE_SALVO', 'TITAN_STOMP', 'DYING'
+    this.state = 'INTRO';
+    this.stateTimer = 1.4;
+    this.attackCooldown = 2.0;
+
+    // Movimentação, Física e Inércia - MELHORADA PARA SER MAIS FLUIDA!
+    this.vx = 0;
+    this.vy = 0;
+    this.facing = -1; // -1 = Esquerda (olhando para os jogadores), 1 = Direita
+    this.targetFacing = -1;
+    this.turnTimer = 0;
+    this.speed = 2.35;
+    this.chaseDistance = 230;
+    this.stepTimer = 0;
+    this.stepCount = 0;
+
+    // Animações Fluidas e Articulação - MUITO MAIS SUAVE!
+    this.animTime = 0;
+    this.bodyBob = 0;
+    this.targetBodyBob = 0; // Para interpolação suave
+    this.bodyLean = 0;
+    this.targetBodyLean = 0; // Para interpolação suave
+    this.headAngle = 0;
+    this.targetHeadAngle = 0; // Cabeça acompanha suavemente
+    this.cannonAngle = 0;
+    this.spineGlow = 0.3;
+    this.recoilX = 0;
+    this.impactWobble = 0;
+    this.impactTilt = 0;
+    this.impactOffsetY = 0;
+    this.chargeParticles = [];
+    this.cinematicX = null;
+    this.cinematicY = null;
+    this.cinematicScale = 1;
+    this.cinematicOpacity = 1;
+    this.cinematicTilt = 0;
+    this.hiddenByDragon = false;
+
+    // Sistema do Mega Raio Laser (Proton Scream)
+    this.laserActive = false;
+    this.laserTimer = 0;
+    this.laserDamageCooldown = 0;
+
+    // Limites de locomoção na Arena do Egito
+    this.minArenaX = 3800;
+    this.maxArenaX = 5120;
   }
 
   update(dt, player, game) {
-    if (this.isDead) return;
+    this.animTime += dt;
     if (this.flashTimer > 0) this.flashTimer -= dt;
 
-    this.attackTimer -= dt;
+    // Depois da destruição, só a cinemática controla a carcaça. Isso evita
+    // novas transições de fase/ataques enquanto o dragão entra em cena.
+    if (this.isDead || this.state === 'DYING') {
+      this.laserActive = false;
+      return;
+    }
 
-    // Fases de Combate
+    if (this.stateTimer > 0) this.stateTimer -= dt;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    if (this.laserDamageCooldown > 0) this.laserDamageCooldown -= dt;
+    this.impactWobble = Math.max(0, this.impactWobble - dt * 2.8);
+    this.impactTilt += (0 - this.impactTilt) * 7 * dt;
+    this.impactOffsetY += (0 - this.impactOffsetY) * 11 * dt;
+
+    // Recoil suave retornando a zero
+    this.recoilX += (0 - this.recoilX) * 5 * dt;
+    
+    // INTERPOLAÇÃO SUAVE para movimentos mais fluidos e orgânicos!
+    this.bodyBob += (this.targetBodyBob - this.bodyBob) * 8 * dt;
+    this.bodyLean += (this.targetBodyLean - this.bodyLean) * 6 * dt;
+    this.headAngle += (this.targetHeadAngle - this.headAngle) * 10 * dt;
+
+    // Fases de Fúria do Titã. A transição acontece uma única vez para ficar
+    // clara para o jogador, em vez de reiniciar efeitos a cada quadro.
     const hpRatio = this.hp / this.maxHp;
-    if (hpRatio < 0.35) this.phase = 3;
-    else if (hpRatio < 0.7) this.phase = 2;
+    const nextPhase = hpRatio < 0.35 ? 3 : (hpRatio < 0.7 ? 2 : 1);
+    if (nextPhase > this.phase) this.enterPhase(nextPhase, game);
 
-    // Mirar canhão principal no jogador
-    const targetAngle = Math.atan2((player.y + 20) - (this.y + 40), (player.x + 15) - (this.x + this.width - 40));
-    this.cannonAngle = Math.max(-0.6, Math.min(0.6, targetAngle));
+    // Mirar a cabeça e canhão na direção do jogador mais próximo - COM SUAVIDADE!
+    const targetP = game.getClosestPlayer(this.x + this.width / 2, this.y + this.height / 2);
+    const distToTarget = (targetP.x + targetP.width / 2) - (this.x + this.width / 2);
+    const absDist = Math.abs(distToTarget);
 
-    // Executar Ataques de acordo com a fase
-    if (this.attackTimer <= 0) {
-      this.performBossAttack(player, game);
+    this.targetFacing = distToTarget > 0 ? 1 : -1;
+
+    const angleToTarget = Math.atan2((targetP.y + 20) - (this.y + 60), (targetP.x + 15) - (this.x + (this.facing === 1 ? this.width : 0)));
+    this.targetHeadAngle = Math.max(-0.45, Math.min(0.45, angleToTarget)); // Usar target ao invés de setar direto
+    this.cannonAngle = this.headAngle; // Usar o valor interpolado
+
+    // Atualizar partículas de carregamento de energia
+    this.updateChargeParticles(dt);
+
+    // ==========================================
+    // MÁQUINA DE ESTADOS & COMPORTAMENTO DO CHEFE
+    // ==========================================
+    switch (this.state) {
+      case 'INTRO':
+        // Entrada triunfal: pouso pesado com tremor e rugido
+        this.spineGlow = 0.5 + Math.sin(this.animTime * 10) * 0.4;
+        if (this.stateTimer <= 0) {
+          game.triggerScreenShake(14, 0.5);
+          audio.playMechaRoar();
+          game.spawnExplosion(this.x + 40, this.y + this.height - 10, 45);
+          game.spawnExplosion(this.x + this.width - 40, this.y + this.height - 10, 45);
+          this.state = 'IDLE';
+          this.stateTimer = 1.0;
+        }
+        break;
+
+      case 'IDLE':
+        this.vx = 0;
+        this.targetBodyBob = Math.sin(this.animTime * 3) * 4; // Respiração suave
+        this.targetBodyLean = 0;
+        this.spineGlow = 0.3 + Math.sin(this.animTime * 4) * 0.2;
+
+        // Virar suavemente se o jogador estiver do outro lado
+        if (this.facing !== this.targetFacing) {
+          this.turnTimer += dt;
+          if (this.turnTimer > 0.35) {
+            this.facing = this.targetFacing;
+            this.turnTimer = 0;
+          }
+        } else {
+          this.turnTimer = 0;
+        }
+
+        // Escolher próximo movimento ao terminar o cooldown
+        if (this.attackCooldown <= 0 && this.stateTimer <= 0) {
+          this.decideNextAction(absDist, game);
+        }
+        break;
+
+      case 'WALK': {
+        // Perseguição contínua: o Titã recalcula a direção durante a marcha,
+        // impedindo que ele continue andando para o lado errado do alvo.
+        const chaseDirection = distToTarget >= 0 ? 1 : -1;
+        this.facing = chaseDirection;
+        this.targetFacing = chaseDirection;
+        this.vx = chaseDirection * this.speed;
+        const walkGait = Math.sin(this.animTime * 7.2);
+        this.targetBodyBob = walkGait * 3.5 + Math.abs(walkGait) * 5;
+        this.targetBodyLean = this.facing * (0.07 + walkGait * 0.035);
+        this.spineGlow = 0.4 + Math.sin(this.animTime * 6) * 0.2;
+
+        // Passadas pesadas com tremor de tela e poeira
+        this.stepTimer += dt;
+        if (this.stepTimer >= 0.32) { // Passos mais rápidos
+          this.stepTimer = 0;
+          this.stepCount++;
+          game.triggerScreenShake(4, 0.15);
+          audio.playMechaStep();
+          const footX = this.x + (this.stepCount % 2 === 0 ? 50 : this.width - 50);
+          game.spawnDust(footX, this.y + this.height - 5);
+        }
+
+        // Limites da arena
+        if ((this.facing === -1 && this.x <= this.minArenaX) || (this.facing === 1 && this.x >= this.maxArenaX)) {
+          this.vx = 0;
+          this.state = 'IDLE';
+          this.stateTimer = 0.5;
+        }
+
+        // Só interrompe a perseguição ao alcançar distância de combate. Se o
+        // jogador fugir, ele continua avançando em vez de voltar ao idle.
+        if (absDist <= this.chaseDistance || this.stateTimer <= 0) {
+          this.vx = 0;
+          this.decideNextAction(absDist, game);
+        }
+        break;
+      }
+
+      case 'RUSH': {
+        // Investida curta e muito rápida nas fases de fúria. É telegráfica
+        // pelo texto/efeito no começo, mas obriga o jogador a sair da linha.
+        const rushDirection = this.rushDirection || this.facing;
+        this.facing = rushDirection;
+        this.vx = rushDirection * this.speed * 2.35;
+        const rushGait = Math.sin(this.animTime * 13);
+        this.targetBodyBob = rushGait * 5 + Math.abs(rushGait) * 7;
+        this.targetBodyLean = rushDirection * (0.16 + rushGait * 0.05);
+        this.spineGlow = 1.2;
+
+        this.stepTimer += dt;
+        if (this.stepTimer >= 0.18) {
+          this.stepTimer = 0;
+          game.triggerScreenShake(6, 0.12);
+          game.spawnDust(this.x + this.width / 2, this.y + this.height - 5);
+        }
+
+        this.rushDamageTimer = Math.max(0, (this.rushDamageTimer || 0) - dt);
+        if (this.rushDamageTimer <= 0) {
+          this.rushDamageTimer = 0.3;
+          this.damagePlayersNear(this.x + this.width / 2, this.y + this.height / 2, 145, 38, game);
+        }
+
+        if (this.stateTimer <= 0 || (rushDirection === -1 && this.x <= this.minArenaX) || (rushDirection === 1 && this.x >= this.maxArenaX)) {
+          this.vx = 0;
+          this.state = 'IDLE';
+          this.stateTimer = 0.45;
+          this.attackCooldown = 1.1;
+        }
+        break;
+      }
+
+      case 'PREPARE_LASER':
+        // Carregamento de energia nos espinhos e boca (Anticipation)
+        this.vx = 0;
+        this.targetBodyBob = -6; // Agacha mais para firmar
+        this.targetBodyLean = -this.facing * 0.15; // Inclina mais para trás
+        this.spineGlow = 1.0 + (1 - this.stateTimer / 0.7) * 1.2;
+
+        // Gerar vórtice de partículas de plasma convergindo na boca
+        if (Math.random() < 0.6) {
+          const mouthX = this.x + (this.facing === 1 ? this.width + 10 : -10);
+          const mouthY = this.y + 65;
+          const rad = 60 + Math.random() * 50;
+          const ang = Math.random() * Math.PI * 2;
+          this.chargeParticles.push({
+            x: mouthX + Math.cos(ang) * rad,
+            y: mouthY + Math.sin(ang) * rad,
+            tx: mouthX,
+            ty: mouthY,
+            life: 0.35,
+            maxLife: 0.35
+          });
+        }
+
+        if (this.stateTimer <= 0) {
+          // Disparar o Proton Scream!
+          this.state = 'FIRE_LASER';
+          this.stateTimer = 1.3; // Duração do feixe contínuo
+          this.laserActive = true;
+          audio.playProtonBeam();
+          game.addFloatingText(this.x + this.width / 2, this.y - 30, '⚡ PROTON SCREAM! ⚡', '#ff0033', 16);
+          this.recoilX = -this.facing * 18;
+        }
+        break;
+
+      case 'FIRE_LASER':
+        // Feixe Laser Massivo Ativo
+        this.vx = 0;
+        this.laserActive = true;
+        this.spineGlow = 2.0;
+        this.bodyBob = Math.sin(this.animTime * 30) * 2; // Vibração intensa
+        this.bodyLean = -this.facing * 0.14; // Recoil contínuo
+        this.recoilX -= this.facing * 12 * dt;
+
+        // Tremer a tela continuamente durante o disparo
+        game.triggerScreenShake(7.5, 0.15);
+
+        // Danificar jogadores atingidos pelo feixe contínuo
+        if (this.laserDamageCooldown <= 0) {
+          this.laserDamageCooldown = 0.12;
+          this.checkLaserCollisions(game);
+        }
+
+        // Fagulhas e impacto de plasma no chão
+        if (Math.random() < 0.7) {
+          const beamLen = 950;
+          const hitX = this.x + (this.facing === 1 ? this.width + Math.random() * beamLen : -Math.random() * beamLen);
+          game.spawnSpark(hitX, this.y + 65 + (Math.random() - 0.5) * 20);
+        }
+
+        if (this.stateTimer <= 0) {
+          this.laserActive = false;
+          this.state = 'RECOIL_LASER';
+          this.stateTimer = 0.5;
+          this.attackCooldown = this.phase === 3 ? 1.8 : 2.5;
+        }
+        break;
+
+      case 'RECOIL_LASER':
+        // Recuperação e dissipação de calor/fumaça pelos exaustores
+        this.laserActive = false;
+        this.spineGlow = Math.max(0.3, this.stateTimer / 0.5);
+        this.bodyBob = 0;
+        this.bodyLean = 0;
+
+        // Liberar vapor de resfriamento
+        if (Math.random() < 0.5) {
+          game.spawnSmoke(this.x + (this.facing === 1 ? 30 : this.width - 30), this.y + 40, 10);
+        }
+
+        if (this.stateTimer <= 0) {
+          this.state = 'IDLE';
+          this.stateTimer = 0.6;
+        }
+        break;
+
+      case 'MISSILE_SALVO':
+        this.vx = 0;
+        this.bodyBob = -2;
+        this.spineGlow = 0.8;
+
+        if (this.stateTimer <= 0) {
+          this.state = 'IDLE';
+          this.stateTimer = 0.8;
+          this.attackCooldown = 2.4;
+        }
+        break;
+
+      case 'TITAN_STOMP':
+        this.vx = 0;
+        if (this.stateTimer <= 0) {
+          this.state = 'IDLE';
+          this.stateTimer = 0.7;
+          this.attackCooldown = 2.2;
+        }
+        break;
+
+      case 'DYING':
+        this.vx = 0;
+        this.laserActive = false;
+        this.spineGlow = Math.random() * 2.0;
+        this.bodyBob = Math.sin(this.animTime * 20) * 3;
+        break;
     }
+
+    // Aplicar velocidade horizontal
+    this.x += this.vx;
+    this.x = Math.max(this.minArenaX, Math.min(this.maxArenaX, this.x));
   }
 
-  performBossAttack(player, game) {
-    if (this.phase === 1) {
-      // Fase 1: Rajada de Metralhadora Vulcan + Canhão Pesado
-      this.attackTimer = 2.5;
-      audio.playShootShotgun();
-      const sx = this.x - 20;
-      const sy = this.y + 40;
-      for (let i = 0; i < 4; i++) {
-        setTimeout(() => {
-          if (this.isDead) return;
-          game.projectiles.push(new Projectile(sx, sy, -11, (i - 1.5) * 1.5, 'bullet', 20, false, 5));
-          audio.playShootHMG();
-        }, i * 140);
-      }
+  decideNextAction(distToPlayer, game) {
+    // Escolhe a próxima tática com base na distância e fase
+    const choices = [];
 
-    } else if (this.phase === 2) {
-      // Fase 2: Chuva de Mísseis Verticais
-      this.attackTimer = 3.2;
-      audio.playBossWarning();
-      for (let i = 0; i < 6; i++) {
-        setTimeout(() => {
-          if (this.isDead) return;
-          const rx = player.x + (i - 2.5) * 80;
-          game.projectiles.push(new Projectile(rx, -40, 0, 7, 'rocket', 35, false, 6, 3.0, true));
-          audio.playShootRocket();
-        }, i * 220);
-      }
-
+    // À distância ele fecha o cerco. Ataques à distância existem para punir
+    // fuga, mas a prioridade é levar o combate até o jogador.
+    if (distToPlayer > 440) {
+      choices.push('WALK', 'WALK', 'WALK', 'MISSILE_SALVO');
+    } else if (distToPlayer > this.chaseDistance) {
+      choices.push('WALK', 'PREPARE_LASER', 'MISSILE_SALVO', 'WALK');
     } else {
-      // Fase 3: Disparo Devastador do Canhão de Plasma + Drones de Apoio
-      this.attackTimer = 3.8;
-      audio.playExplosion(true);
-      game.triggerScreenShake(8, 0.4);
+      // Muito perto: pisada sísmica devastadora ou laser
+      choices.push('TITAN_STOMP', 'TITAN_STOMP', 'PREPARE_LASER');
+    }
 
-      // Mega Raio de Plasma
-      const sx = this.x - 30;
-      const sy = this.y + 45;
-      for (let i = 0; i < 12; i++) {
-        setTimeout(() => {
-          if (this.isDead) return;
-          game.projectiles.push(new Projectile(sx, sy, -14, (Math.random() - 0.5) * 4, 'laser', 30, false, 7, 1.2));
-        }, i * 80);
+    if (this.phase >= 2 && distToPlayer > 250 && distToPlayer < 760) {
+      choices.push('RUSH', 'RUSH');
+    }
+
+    // Evita repetir o mesmo ataque especial em sequência: a luta fica mais
+    // legível e o jogador sempre tem uma janela para reagir.
+    let nextAction = choices[Math.floor(Math.random() * choices.length)];
+    if (nextAction === this.lastAttack && choices.length > 1) {
+      const alternatives = choices.filter(choice => choice !== this.lastAttack);
+      nextAction = alternatives[Math.floor(Math.random() * alternatives.length)];
+    }
+    this.lastAttack = nextAction;
+
+    if (nextAction === 'WALK') {
+      this.state = 'WALK';
+      // Tempo suficiente para avançar de verdade; a distância de combate pode
+      // encerrar esse estado antes se o jogador estiver próximo.
+      this.stateTimer = 2.8 + Math.random() * 1.4;
+      this.stepTimer = 0;
+    } else if (nextAction === 'RUSH') {
+      this.executeRush(game);
+    } else if (nextAction === 'PREPARE_LASER') {
+      this.state = 'PREPARE_LASER';
+      this.stateTimer = 0.65;
+      audio.playLaserCharge();
+    } else if (nextAction === 'MISSILE_SALVO') {
+      this.executeMissileSalvo(game);
+    } else if (nextAction === 'TITAN_STOMP') {
+      this.executeTitanStomp(game);
+    }
+  }
+
+  executeRush(game) {
+    this.state = 'RUSH';
+    this.stateTimer = this.phase === 3 ? 1.25 : 0.95;
+    this.rushDirection = this.targetFacing;
+    this.facing = this.rushDirection;
+    this.stepTimer = 0;
+    this.rushDamageTimer = 0;
+    audio.playMechaRoar();
+    game.triggerScreenShake(9, 0.2);
+    game.addFloatingText(this.x + this.width / 2, this.y - 25, '⚠️ TITAN CHARGE! ⚠️', '#ff3300', 15);
+  }
+
+  executeMissileSalvo(game) {
+    this.state = 'MISSILE_SALVO';
+    this.stateTimer = 1.2;
+    const attackRunId = game.runId;
+    audio.playBossWarning();
+    game.addFloatingText(this.x + this.width / 2, this.y - 25, '🚀 MISSILE SWARM! 🚀', '#ffaa00', 14);
+
+    const count = this.phase === 3 ? 8 : (this.phase === 2 ? 6 : 4);
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        if (game.runId !== attackRunId || game.boss !== this || this.isDead || game.cinematicActive || game.state !== 'PLAYING') return;
+        const sx = this.x + (this.facing === 1 ? 40 + i * 15 : this.width - 40 - i * 15);
+        const sy = this.y - 15;
+        const target = game.getClosestPlayer(sx, sy);
+        const tx = target.x + target.width / 2;
+        const ty = target.y + target.height / 2;
+        const angle = Math.atan2(ty - sy, tx - sx);
+        const spread = (i - (count - 1) / 2) * 0.08;
+        const speed = 8.5;
+        game.projectiles.push(new Projectile(
+          sx, sy, Math.cos(angle + spread) * speed, Math.sin(angle + spread) * speed,
+          'rocket', 35, false, 6, 3.5, true
+        ));
+        audio.playShootRocket();
+        game.spawnSmoke(sx, sy, 8);
+      }, i * 140);
+    }
+  }
+
+  executeTitanStomp(game) {
+    this.state = 'TITAN_STOMP';
+    this.stateTimer = 1.0;
+    const attackRunId = game.runId;
+    audio.playExplosion(true);
+    game.triggerScreenShake(14, 0.45);
+    game.addFloatingText(this.x + this.width / 2, this.y + this.height - 20, '💥 TITAN SEISMIC STOMP! 💥', '#ff3300', 15);
+
+    // Onda de choque que viaja pelo chão da arena em ambas as direções
+    const waveCount = 12;
+    for (let i = 0; i < waveCount; i++) {
+      setTimeout(() => {
+        if (game.runId !== attackRunId || game.boss !== this || this.isDead || game.cinematicActive || game.state !== 'PLAYING') return;
+        const groundY = this.y + this.height - 10;
+        const sx1 = this.x - i * 40;
+        const sx2 = this.x + this.width + i * 40;
+
+        game.spawnExplosion(sx1, groundY, 28);
+        game.spawnExplosion(sx2, groundY, 28);
+        this.damagePlayersNear(sx1, groundY, 56, 28, game);
+        this.damagePlayersNear(sx2, groundY, 56, 28, game);
+
+        // Disparo secundário de plasma
+        if (i % 3 === 0) {
+          const cannonY = this.y + 90;
+          const cannonX = this.x + (this.facing === 1 ? this.width + 10 : -10);
+          game.projectiles.push(new Projectile(cannonX, cannonY, this.facing * 16, (Math.random() - 0.5) * 1.5, 'laser', 25, false, 6, 1.2));
+          audio.playShootLaser();
+        }
+      }, i * 55);
+    }
+  }
+
+  checkLaserCollisions(game) {
+    const mouthX = this.x + (this.facing === 1 ? this.width + 15 : -15);
+    const mouthY = this.y + 65;
+    const beamLength = 1000;
+    const beamHeight = 44;
+
+    const beamMinX = this.facing === 1 ? mouthX : mouthX - beamLength;
+    const beamMaxX = this.facing === 1 ? mouthX + beamLength : mouthX;
+    const beamMinY = mouthY - beamHeight / 2;
+    const beamMaxY = mouthY + beamHeight / 2;
+
+    // Verificar colisão com jogadores vivos
+    game.players.forEach(p => {
+      if (p.isDead || p.isInvulnerable) return;
+      if (p.x + p.width > beamMinX && p.x < beamMaxX && p.y + p.height > beamMinY && p.y < beamMaxY) {
+        p.takeDamage(30, game);
+        game.spawnBlood(p.x + p.width / 2, p.y + p.height / 2);
       }
+    });
 
-      // Evocar drone de apoio se houver poucos
-      if (game.enemies.filter(e => e.type === 'drone').length < 2) {
-        game.enemies.push(new Enemy(this.x - 100, 80, 'drone'));
+    // Verificar colisão com o Slug
+    game.slugs.forEach(s => {
+      if (s.destroyed) return;
+      if (s.x + s.width > beamMinX && s.x < beamMaxX && s.y + s.height > beamMinY && s.y < beamMaxY) {
+        s.takeDamage(20, game);
+        game.spawnSpark(s.x + s.width / 2, s.y + s.height / 2);
+      }
+    });
+  }
+
+  enterPhase(phase, game) {
+    this.phase = phase;
+    this.speed = phase === 3 ? 4.1 : 3.15;
+    this.chaseDistance = phase === 3 ? 175 : 205;
+    this.attackCooldown = 0.8;
+    game.triggerScreenShake(phase === 3 ? 12 : 8, 0.35);
+    audio.playMechaRoar();
+    const label = phase === 3 ? '☢️ NÚCLEO EM FUSÃO! ☢️' : '⚠️ PROTOCOLO DE CAÇA ATIVO! ⚠️';
+    game.addFloatingText(this.x + this.width / 2, this.y - 45, label, phase === 3 ? '#ff3300' : '#ffaa00', 16);
+  }
+
+  damagePlayersNear(x, y, radius, damage, game) {
+    game.players.forEach(player => {
+      if (player.isDead || player.isInvulnerable) return;
+      const target = player.inSlug && player.slugRef ? player.slugRef : player;
+      const centerX = target.x + target.width / 2;
+      const centerY = target.y + target.height / 2;
+      if (Math.hypot(centerX - x, centerY - y) <= radius) {
+        player.takeDamage(damage, game);
+        game.spawnDust(centerX, target.y + target.height);
+      }
+    });
+  }
+
+  updateChargeParticles(dt) {
+    for (let i = this.chargeParticles.length - 1; i >= 0; i--) {
+      const p = this.chargeParticles[i];
+      p.life -= dt;
+      const progress = 1 - (p.life / p.maxLife);
+      p.curX = p.x + (p.tx - p.x) * progress;
+      p.curY = p.y + (p.ty - p.y) * progress;
+      if (p.life <= 0) {
+        this.chargeParticles.splice(i, 1);
       }
     }
   }
 
-  takeDamage(amount, game) {
+  takeDamage(amount, arg2, arg3) {
     if (this.isDead) return;
+    const game = (arg2 && typeof arg2 === 'object' && arg2.spawnSpark) ? arg2 : (arg3 && typeof arg3 === 'object' && arg3.spawnSpark ? arg3 : (window.game || null));
     this.hp -= amount;
-    this.flashTimer = 0.06;
-    game.spawnSpark(this.x + Math.random() * this.width, this.y + Math.random() * this.height);
+    this.flashTimer = 0.08;
+    const impactStrength = Math.min(1, amount / 360);
+    this.recoilX += (this.facing === -1 ? 3 : -3) * (1 + impactStrength * 1.8);
+    this.impactWobble = Math.min(1.2, this.impactWobble + impactStrength);
+    this.impactTilt += -this.facing * impactStrength * 0.13;
+    this.impactOffsetY -= impactStrength * 5;
+
+    if (game && game.spawnSpark) {
+      game.spawnSpark(this.x + Math.random() * this.width, this.y + Math.random() * this.height);
+    }
 
     if (this.hp <= 0) {
       this.die(game);
@@ -1302,28 +1740,233 @@ class Boss {
   }
 
   die(game) {
+    if (this.isDead && this.state === 'DYING') return;
     this.isDead = true;
+    this.state = 'DYING';
     this.hp = 0;
-    game.player.score += 25000;
-    game.addFloatingText(this.x + this.width / 2, this.y, '+25000 BOSS DEFEATED!', '#ffcc00', 16);
+    this.laserActive = false;
+    this.cinematicX = this.x;
+    this.cinematicY = this.y;
+    this.cinematicScale = 1;
+    this.cinematicOpacity = 1;
+    this.cinematicTilt = this.facing * 0.035;
+    const g = game || window.game;
+    const finaleRunId = g ? g.runId : null;
+    if (g && g.players) {
+      g.players.forEach(p => { p.score += 50000; });
+    }
+    if (g && g.addFloatingText) {
+      g.addFloatingText(this.x + this.width / 2, this.y - 25, '👑 MECHAGODZILLA DESTROYED! +50000 👑', '#ffcc00', 18);
+    }
+    audio.playMechaRoar();
 
-    // Efeito de Múltiplas Explosões em Cadeia
-    for (let i = 0; i < 12; i++) {
+    // A carcaça sofre uma pane em cadeia antes de ser recolhida pelo dragão.
+    // Menos explosões preservam o corpo para a transição cinematográfica.
+    for (let i = 0; i < 10; i++) {
       setTimeout(() => {
-        game.spawnExplosion(this.x + Math.random() * this.width, this.y + Math.random() * this.height, 50 + Math.random() * 30);
-        audio.playExplosion(true);
-        game.triggerScreenShake(8, 0.2);
-      }, i * 250);
+        // Timers pertencem a esta partida. Eles não podem vazar uma explosão
+        // para uma nova missão após o jogador apertar "jogar novamente".
+        if (g && g.runId === finaleRunId && (g.state === 'PLAYING' || g.cinematicActive) && g.spawnExplosion) {
+          g.spawnExplosion(this.x + Math.random() * this.width, this.y + Math.random() * this.height, 65 + Math.random() * 45);
+          audio.playExplosion(true);
+          if (g.triggerScreenShake) g.triggerScreenShake(11, 0.3);
+        }
+      }, i * 110);
     }
 
-    setTimeout(() => {
-      game.missionComplete();
-    }, 3200);
+    if (g && g.startDragonFinale) {
+      g.startDragonFinale(this);
+    } else {
+      setTimeout(() => {
+        if (g && g.missionComplete) g.missionComplete();
+      }, 2400);
+    }
   }
 }
 
 // ==========================================
-// 4. THE CYBER SLUG (MINI-TANQUE PILOTÁVEL)
+// 4. CINEMÁTICA FINAL — DRAGÃO TRICÉFALO
+// ==========================================
+class DragonCinematic {
+  constructor(boss, game) {
+    this.boss = boss;
+    this.state = 'APPROACH';
+    this.stateTime = 0;
+    this.totalTime = 0;
+    this.x = boss.x + 720;
+    this.y = boss.y - 200;
+    this.scale = 1.05;
+    this.facing = -1;
+    this.bank = 0;
+    this.wingPhase = 0;
+    this.tailPhase = 0;
+    this.headPhase = 0;
+    this.carrying = false;
+    this.sweepHit = false;
+    this.impactDone = false;
+    this.impactPulses = 0;
+    this.originX = this.x;
+    this.originY = this.y;
+    this.game = game;
+  }
+
+  transition(nextState) {
+    this.state = nextState;
+    this.stateTime = 0;
+  }
+
+  update(dt, game) {
+    this.stateTime += dt;
+    this.totalTime += dt;
+    const wingSpeed = this.state === 'CARRY' || this.state === 'RETURN' || this.state === 'SWEEP' ? 13 : 8;
+    this.wingPhase += dt * wingSpeed;
+    this.tailPhase += dt * 5;
+    this.headPhase += dt * 4;
+
+    const boss = this.boss;
+    const easeOut = t => 1 - Math.pow(1 - Math.min(1, t), 3);
+
+    if (this.state === 'APPROACH') {
+      this.facing = -1;
+      this.bank += (0.05 - this.bank) * Math.min(1, dt * 5);
+      const progress = easeOut(this.stateTime / 1.15);
+      this.x = this.originX + ((boss.x + 420) - this.originX) * progress;
+      this.y = this.originY + ((boss.y - 150) - this.originY) * progress + Math.sin(this.wingPhase) * 13;
+      this.scale = 1.05 + progress * 0.12;
+      this.setFallingBossPose(progress);
+      if (this.stateTime >= 1.15) {
+        audio.playMechaRoar();
+        game.addFloatingText(boss.x + boss.width / 2, boss.y - 115, '🐉 UMA PRESENÇA ANCESTRAL DESCEU! 🐉', '#ffe066', 14);
+        this.originX = this.x;
+        this.originY = this.y;
+        this.transition('SWEEP');
+      }
+      return;
+    }
+
+    if (this.state === 'SWEEP') {
+      // Rasante de garra: o dragão passa rente à carcaça antes de segurá-la.
+      this.facing = -1;
+      this.bank += (0.23 - this.bank) * Math.min(1, dt * 9);
+      const progress = easeOut(this.stateTime / 0.7);
+      this.x = this.originX + ((boss.x + 135) - this.originX) * progress;
+      this.y = this.originY + ((boss.y - 35) - this.originY) * progress + Math.sin(this.wingPhase * 1.6) * 8;
+      this.scale = 1.16 + progress * 0.1;
+      this.setFallingBossPose(1);
+      if (!this.sweepHit && this.stateTime >= 0.25) {
+        this.sweepHit = true;
+        game.triggerDragonClawStrike(boss);
+      }
+      if (this.stateTime >= 0.7) this.transition('GRAB');
+      return;
+    }
+
+    if (this.state === 'GRAB') {
+      this.facing = -1;
+      this.bank += (-0.04 - this.bank) * Math.min(1, dt * 7);
+      this.y = boss.y - 105 + Math.sin(this.wingPhase * 0.7) * 7;
+      this.x = boss.x + 135;
+      this.scale = 1.17 + Math.sin(this.wingPhase) * 0.025;
+      if (this.stateTime > 0.22) this.carrying = true;
+      if (this.carrying) this.attachBoss();
+      if (this.stateTime >= 0.72) {
+        game.triggerScreenShake(11, 0.32);
+        game.addFloatingText(this.x, this.y - 125, '⚡ O DRAGÃO RECLAMA O TITÃ! ⚡', '#fff1a8', 14);
+        this.originX = this.x;
+        this.originY = this.y;
+        this.transition('CARRY');
+      }
+      return;
+    }
+
+    if (this.state === 'CARRY') {
+      // O dragão faz a curva e carrega o Mecha para a direita, de frente para
+      // a direção do voo, em vez de deslizar de costas.
+      this.facing = 1;
+      this.bank += (-0.14 - this.bank) * Math.min(1, dt * 6);
+      const progress = easeOut(this.stateTime / 1.15);
+      this.x = this.originX + 650 * progress;
+      this.y = this.originY - 280 * progress + Math.sin(this.wingPhase) * 12;
+      this.scale = 1.17 - progress * 0.16;
+      this.attachBoss();
+      if (this.stateTime >= 1.15) {
+        boss.hiddenByDragon = true;
+        this.carrying = false;
+        this.originX = game.camera.x + game.canvas.width + 360;
+        this.originY = 120;
+        this.transition('RETURN');
+      }
+      return;
+    }
+
+    if (this.state === 'RETURN') {
+      const progress = easeOut(this.stateTime / 1.05);
+      const targetX = game.camera.x + game.canvas.width * 0.53;
+      const targetY = 255;
+      this.x = this.originX + (targetX - this.originX) * progress;
+      this.y = this.originY + (targetY - this.originY) * progress;
+      // Crescer durante o mergulho cria a sensação de salto em direção à tela.
+      this.scale = 0.92 + progress * 1.9;
+      this.facing = -1;
+      this.bank += (0.16 - this.bank) * Math.min(1, dt * 6);
+      if (this.stateTime >= 1.05) {
+        this.transition('IMPACT');
+      }
+      return;
+    }
+
+    if (this.state === 'IMPACT') {
+      this.bank += (0 - this.bank) * Math.min(1, dt * 9);
+      this.scale = 2.82 + Math.sin(this.stateTime * 20) * 0.07;
+      this.y = 255 + Math.sin(this.wingPhase * 0.5) * 4;
+      if (!this.impactDone) {
+        this.impactDone = true;
+        game.triggerDragonImpact(this.x, this.y, 760);
+        this.impactPulses = 1;
+      }
+      const wantedPulses = Math.min(4, Math.floor(this.stateTime / 0.18) + 1);
+      while (this.impactPulses < wantedPulses) {
+        game.triggerDragonAftershock(this.x, this.y, this.impactPulses);
+        this.impactPulses++;
+      }
+      if (this.stateTime >= 0.95) this.transition('ASCEND');
+      return;
+    }
+
+    if (this.state === 'ASCEND') {
+      this.bank += (-0.1 - this.bank) * Math.min(1, dt * 4);
+      this.y -= 330 * dt;
+      this.x += 150 * dt;
+      this.scale = Math.max(0.7, this.scale - 0.7 * dt);
+      if (this.stateTime >= 1.15) {
+        this.state = 'DONE';
+        game.missionComplete();
+      }
+    }
+  }
+
+  attachBoss() {
+    this.boss.cinematicX = this.x - 130;
+    // A posição é o canto superior do sprite; manter o centro próximo às
+    // patas evita que a carcaça pareça flutuar abaixo do dragão.
+    this.boss.cinematicY = this.y - 20;
+    this.boss.cinematicScale = 0.58;
+    this.boss.cinematicOpacity = 0.94;
+    this.boss.cinematicTilt = -this.facing * 0.16 + Math.sin(this.wingPhase * 0.5) * 0.04;
+  }
+
+  setFallingBossPose(progress) {
+    const bob = Math.sin(this.wingPhase * 0.7) * (3 + progress * 4);
+    this.boss.cinematicX = this.boss.x + Math.sin(this.tailPhase) * 3;
+    this.boss.cinematicY = this.boss.y + 6 + bob;
+    this.boss.cinematicScale = 1;
+    this.boss.cinematicOpacity = 0.88;
+    this.boss.cinematicTilt = this.boss.facing * (0.05 + progress * 0.18);
+  }
+}
+
+// ==========================================
+// 5. THE CYBER SLUG (MINI-TANQUE PILOTÁVEL)
 // ==========================================
 class SlugVehicle {
   constructor(x, y) {
@@ -1350,15 +1993,15 @@ class SlugVehicle {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
 
     if (this.isOccupied) {
-      const moveLeft = input.isDown('left');
-      const moveRight = input.isDown('right');
-      const lookUp = input.isDown('up');
-      const lookDown = input.isDown('down');
-      const jumpPressed = input.isPressed('jump');
-      const shootDown = input.isDown('shoot');
-      const bombPressed = input.isPressed('bomb');
-      const enterPressed = input.isPressed('enter');
-      const executionPressed = input.isPressed('execution'); // Tecla R para execução
+      const isP2 = this.driverPlayerIndex === 1;
+      const moveLeft = isP2 ? input.isDown('p2_left') : input.isDown('left');
+      const moveRight = isP2 ? input.isDown('p2_right') : input.isDown('right');
+      const lookUp = isP2 ? input.isDown('p2_up') : input.isDown('up');
+      const lookDown = isP2 ? input.isDown('p2_down') : input.isDown('down');
+      const jumpPressed = isP2 ? input.isPressed('p2_jump') : input.isPressed('jump');
+      const shootDown = isP2 ? input.isDown('p2_shoot') : input.isDown('shoot');
+      const bombPressed = isP2 ? input.isPressed('p2_bomb') : input.isPressed('bomb');
+      const enterPressed = isP2 ? input.isPressed('p2_enter') : input.isPressed('enter');
 
       // Movimentação
       if (moveLeft && !moveRight) {
@@ -1546,7 +2189,7 @@ class Projectile {
 
     // Míssil Teleguiado
     if (this.isHoming) {
-      const target = this.isPlayer ? game.getClosestEnemy(this.x, this.y) : game.player;
+      const target = this.isPlayer ? game.getClosestEnemy(this.x, this.y) : game.getClosestPlayer(this.x, this.y);
       if (target) {
         const tx = target.x + target.width / 2;
         const ty = target.y + target.height / 2;
@@ -1584,6 +2227,7 @@ class Pickup {
     this.height = 28;
 
     switch (type) {
+      case 'BOW': this.icon = '🏹'; this.color = '#00d9ff'; this.ammo = 120; break;
       case 'AXE': this.icon = '🪓'; this.color = '#ffd700'; this.ammo = 80; break;
       case 'HMG': this.icon = 'H'; this.color = '#ff9900'; this.ammo = 150; break;
       case 'SHOTGUN': this.icon = 'S'; this.color = '#38bdf8'; this.ammo = 30; break;

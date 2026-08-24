@@ -25,31 +25,49 @@ class InputManager {
   }
 
   isDown(action) {
-    // Teclado
     switch (action) {
-      case 'left': return this.keys['KeyA'] || this.keys['ArrowLeft'] || this.keys['TouchLeft'];
-      case 'right': return this.keys['KeyD'] || this.keys['ArrowRight'] || this.keys['TouchRight'];
-      case 'up': return this.keys['KeyW'] || this.keys['ArrowUp'] || this.keys['TouchUp'];
-      case 'down': return this.keys['KeyS'] || this.keys['ArrowDown'] || this.keys['TouchDown'];
-      case 'jump': return this.keys['Space'] || this.keys['KeyJ'] || this.keys['TouchJump'];
-      case 'shoot': return this.keys['KeyK'] || this.keys['KeyZ'] || this.keys['TouchShoot'];
-      case 'bomb': return this.keys['KeyL'] || this.keys['KeyX'] || this.keys['TouchBomb'];
-      case 'enter': return this.keys['KeyE'] || this.keys['KeyC'] || this.keys['TouchEnter'];
-      case 'execution': return this.keys['KeyR'];
+      // 1P Controls: WASD + J/K/L/E/R ou Touch/Gamepad
+      case 'left': return !!(this.keys['KeyA'] || this.keys['TouchLeft']);
+      case 'right': return !!(this.keys['KeyD'] || this.keys['TouchRight']);
+      case 'up': return !!(this.keys['KeyW'] || this.keys['TouchUp']);
+      case 'down': return !!(this.keys['KeyS'] || this.keys['TouchDown']);
+      case 'jump': return !!(this.keys['Space'] || this.keys['KeyJ'] || this.keys['TouchJump']);
+      case 'shoot': return !!(this.keys['KeyK'] || this.keys['KeyZ'] || this.keys['TouchShoot']);
+      case 'bomb': return !!(this.keys['KeyL'] || this.keys['KeyX'] || this.keys['TouchBomb']);
+      case 'enter': return !!(this.keys['KeyE'] || this.keys['KeyC'] || this.keys['TouchEnter']);
+      case 'execution': return !!this.keys['KeyR'];
+
+      // 2P Controls: Setas + Teclado Numérico / Linha de Números (1, 2, 3, 4, 0) + U/I/O/P/Y
+      case 'p2_left': return !!(this.keys['ArrowLeft'] || this.keys['Numpad4']);
+      case 'p2_right': return !!(this.keys['ArrowRight'] || this.keys['Numpad6']);
+      case 'p2_up': return !!(this.keys['ArrowUp'] || this.keys['Numpad8']);
+      case 'p2_down': return !!(this.keys['ArrowDown'] || this.keys['Numpad5'] || this.keys['Numpad2']);
+      case 'p2_jump': return !!(this.keys['Digit1'] || this.keys['Numpad1'] || this.keys['KeyU']);
+      case 'p2_shoot': return !!(this.keys['Digit2'] || this.keys['Numpad2'] || this.keys['KeyI']);
+      case 'p2_bomb': return !!(this.keys['Digit3'] || this.keys['Numpad3'] || this.keys['KeyO']);
+      case 'p2_execution': return !!(this.keys['Digit4'] || this.keys['Numpad7'] || this.keys['KeyY']);
+      case 'p2_enter': return !!(this.keys['Digit0'] || this.keys['Numpad0'] || this.keys['KeyP']);
       default: return false;
     }
   }
 
   isPressed(action) {
-    let result = false;
     switch (action) {
-      case 'jump': result = this.pressed['Space'] || this.pressed['KeyJ'] || this.pressed['TouchJump']; break;
-      case 'shoot': result = this.pressed['KeyK'] || this.pressed['KeyZ'] || this.pressed['TouchShoot']; break;
-      case 'bomb': result = this.pressed['KeyL'] || this.pressed['KeyX'] || this.pressed['TouchBomb']; break;
-      case 'enter': result = this.pressed['KeyE'] || this.pressed['KeyC'] || this.pressed['TouchEnter']; break;
-      case 'execution': result = this.pressed['KeyR']; break;
+      // 1P
+      case 'jump': return !!(this.pressed['Space'] || this.pressed['KeyJ'] || this.pressed['TouchJump']);
+      case 'shoot': return !!(this.pressed['KeyK'] || this.pressed['KeyZ'] || this.pressed['TouchShoot']);
+      case 'bomb': return !!(this.pressed['KeyL'] || this.pressed['KeyX'] || this.pressed['TouchBomb']);
+      case 'enter': return !!(this.pressed['KeyE'] || this.pressed['KeyC'] || this.pressed['TouchEnter']);
+      case 'execution': return !!this.pressed['KeyR'];
+
+      // 2P
+      case 'p2_jump': return !!(this.pressed['Digit1'] || this.pressed['Numpad1'] || this.pressed['KeyU']);
+      case 'p2_shoot': return !!(this.pressed['Digit2'] || this.pressed['Numpad2'] || this.pressed['KeyI']);
+      case 'p2_bomb': return !!(this.pressed['Digit3'] || this.pressed['Numpad3'] || this.pressed['KeyO']);
+      case 'p2_execution': return !!(this.pressed['Digit4'] || this.pressed['Numpad7'] || this.pressed['KeyY']);
+      case 'p2_enter': return !!(this.pressed['Digit0'] || this.pressed['Numpad0'] || this.pressed['KeyP']);
+      default: return false;
     }
-    return !!result;
   }
 
   clearPressed() {
@@ -127,6 +145,7 @@ class Game {
 
     this.time = 0;
     this.lastTime = 0;
+    this.runId = 0;
     this.state = 'START'; // 'START', 'PLAYING', 'GAMEOVER', 'VICTORY'
 
     // Modo de Jogo
@@ -137,17 +156,31 @@ class Game {
     this.players = []; // Array de jogadores para suportar multiplayer
     this.enemies = [];
     this.boss = null;
+    this.dragon = null;
+    this.lightningEffects = [];
+    this.cinematicActive = false;
+    this.cinematicFlash = 0;
+    this.cinematicFlashColor = '#ffffff';
     this.slugs = [];
     this.pows = [];
     this.projectiles = [];
     this.explosions = [];
     this.particles = [];
+    this.executionEffects = [];
     this.pickups = [];
     this.floatingTexts = [];
+    
+    // SISTEMA DE PORTÕES/BARREIRAS POR BIOMA!
+    this.biomeGates = {
+      tokyo: { active: false, cleared: false, enemiesRequired: 0, enemiesKilled: 0, x: 1250 },
+      brazil: { active: false, cleared: false, enemiesRequired: 0, enemiesKilled: 0, x: 2450 },
+      europe: { active: false, cleared: false, enemiesRequired: 0, enemiesKilled: 0, x: 3650 },
+      egypt: { active: false, cleared: false, enemiesRequired: 0, enemiesKilled: 0, x: 4900 }
+    };
 
     // Seleções de Personagens
     this.p1Character = 'claudio';
-    this.p2Character = 'marco';
+    this.p2Character = 'jessica';
 
     // Cache de elementos do HUD - Player 1
     this.hudHpFill = document.getElementById('hud-hp-fill');
@@ -174,6 +207,7 @@ class Game {
     // Boss e Slug HUD
     this.bossHud = document.getElementById('boss-hud');
     this.bossHpFill = document.getElementById('boss-hp-fill');
+    this.bossPhase = document.getElementById('boss-phase');
     this.slugHud = document.getElementById('slug-hud');
     this.slugCannonCount = document.getElementById('slug-cannon-count');
 
@@ -286,42 +320,98 @@ class Game {
     });
   }
 
-  updateHUDCharacter(charId, name) {
-    if (this.hudCharName) this.hudCharName.textContent = name;
-    if (this.hudCharImg) {
-      if (charId === 'claudio') {
-        this.hudCharImg.src = 'assets/claudio.png';
-        this.hudCharImg.style.display = 'block';
-      } else {
-        // Gera avatar ou exibe foto representativa
-        this.hudCharImg.src = 'assets/claudio.png'; // Fallback
+  updateHUDCharacter(charId, name, playerIndex = 0) {
+    if (playerIndex === 0) {
+      if (this.hudCharName) this.hudCharName.textContent = name;
+      if (this.hudCharImg) {
+        if (charId === 'claudio') {
+          this.hudCharImg.src = 'assets/claudio.png';
+          this.hudCharImg.style.display = 'block';
+        } else if (charId === 'jessica') {
+          this.hudCharImg.src = 'assets/jessica.png';
+          this.hudCharImg.style.display = 'block';
+        } else {
+          this.hudCharImg.src = 'assets/claudio.png';
+        }
+      }
+    } else if (playerIndex === 1) {
+      if (this.hudP2CharName) this.hudP2CharName.textContent = name;
+      if (this.hudP2CharImg) {
+        if (charId === 'claudio') {
+          this.hudP2CharImg.src = 'assets/claudio.png';
+          this.hudP2CharImg.style.display = 'block';
+        } else if (charId === 'jessica') {
+          this.hudP2CharImg.src = 'assets/jessica.png';
+          this.hudP2CharImg.style.display = 'block';
+        } else {
+          this.hudP2CharImg.src = 'assets/claudio.png';
+        }
       }
     }
   }
 
   startGame() {
+    this.runId++;
     audio.init();
     audio.resume();
     audio.startBGM();
 
-    const charAnnounce = this.p1Character === 'claudio' ? 'CLÁUDIO' : this.p1Character.toUpperCase();
-    audio.announce(`${charAnnounce}! MISSION 1 START`);
+    const charAnnounce1 = this.p1Character.toUpperCase();
+    const charAnnounce2 = this.p2Character.toUpperCase();
+    
+    if (this.gameMode === '2P') {
+      audio.announce(`2 PLAYERS MISSION START! ${charAnnounce1} AND ${charAnnounce2}!`);
+    } else {
+      audio.announce(`${charAnnounce1}! MISSION 1 START`);
+    }
 
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('gameover-screen').style.display = 'none';
     document.getElementById('victory-screen').style.display = 'none';
 
     this.map = new LevelMap(this.canvas.width, this.canvas.height);
-    this.player = new Player(60, this.canvas.height - 180, this.p1Character);
+    
+    // Instanciar Jogadores (1P e 2P)
+    if (this.gameMode === '2P') {
+      this.players = [
+        new Player(60, this.canvas.height - 180, this.p1Character, 0),
+        new Player(130, this.canvas.height - 180, this.p2Character, 1)
+      ];
+      if (this.hudP2Group) this.hudP2Group.style.display = 'flex';
+      this.updateHUDCharacter(this.p2Character, charAnnounce2, 1);
+    } else {
+      this.players = [
+        new Player(60, this.canvas.height - 180, this.p1Character, 0)
+      ];
+      if (this.hudP2Group) this.hudP2Group.style.display = 'none';
+    }
+
+    this.player = this.players[0]; // Referência de compatibilidade para 1P
+
     this.enemies = [];
     this.boss = null;
+    this.dragon = null;
+    this.lightningEffects = [];
+    this.cinematicActive = false;
+    this.cinematicFlash = 0;
+    this.cinematicFlashColor = '#ffffff';
     this.slugs = [];
     this.pows = [];
     this.projectiles = [];
     this.explosions = [];
     this.particles = [];
+    this.executionEffects = [];
     this.pickups = [];
     this.floatingTexts = [];
+
+    // Cada portal só abre quando o setor inteiro foi limpo. O contador era
+    // sempre zero, o que fazia os biomas serem liberados após o primeiro KO.
+    Object.entries(this.biomeGates).forEach(([biome, gate]) => {
+      gate.active = false;
+      gate.cleared = false;
+      gate.enemiesKilled = 0;
+      gate.enemiesRequired = this.map.enemySpawners.filter(spawner => spawner.biome === biome).length;
+    });
 
     // Spawna os Reféns POW
     this.map.powSpawns.forEach(p => {
@@ -333,12 +423,17 @@ class Game {
       this.slugs.push(new SlugVehicle(s.x, s.y));
     });
 
-    // Atualizar HUD com o personagem inicial
-    this.updateHUDCharacter(this.p1Character, charAnnounce);
+    // Atualizar HUD com os personagens
+    this.updateHUDCharacter(this.p1Character, charAnnounce1, 0);
 
-    // Texto de Entrada Triunfal do Personagem
-    const introBadge = this.p1Character === 'claudio' ? '★ CLÁUDIO STRIKE LEADER ★' : `${charAnnounce} READY!`;
-    this.addFloatingText(this.player.x + 30, this.player.y - 35, introBadge, '#ffcc00', 13);
+    // Texto de Entrada Triunfal
+    this.players.forEach(p => {
+      const badge = p.characterId === 'claudio' ? '★ CLAUDIO NORDIC WARRIOR ★' : 
+                   (p.characterId === 'jessica' ? '🏹 JESSICA PHANTOM HUNTRESS 🏹' : `${p.characterId.toUpperCase()} READY!`);
+      this.addFloatingText(p.x + 10, p.y - 35, badge, p.playerIndex === 0 ? '#ffcc00' : '#00d9ff', 13);
+    });
+
+    this.announcedRegions = {};
 
     this.state = 'PLAYING';
     this.lastTime = performance.now();
@@ -364,45 +459,114 @@ class Game {
   update(dt) {
     renderer.update(dt);
 
-    // 1. Atualizar Jogador ou Tanque Ativo
-    if (this.player) {
-      this.player.update(dt, this.input, this);
+    // A vitória final é uma cena controlada pelo motor. Manter esta rota
+    // separada impede que tiros ou inimigos comuns interrompam o dragão.
+    if (this.cinematicActive) {
+      this.updateFinaleCinematic(dt);
+      return;
     }
+
+    // 1. Atualizar Todos os Jogadores Ativos
+    this.players.forEach(p => {
+      p.update(dt, this.input, this);
+    });
 
     // 2. Atualizar Tanques Slug
     this.slugs.forEach(slug => {
       slug.update(dt, this.input, this);
     });
 
-    // 3. Atualizar e Spawnar Inimigos por Proximidade do Jogador
+    // 3. Atualizar e Spawnar Inimigos por Proximidade dos Jogadores
+    const leadPlayerX = Math.max(...this.players.map(p => p.x));
+
+    // Anúncios de Chegada em Novos Países
+    if (!this.announcedRegions['tokyo'] && leadPlayerX > 30) {
+      this.announcedRegions['tokyo'] = true;
+      this.addFloatingText(this.camera.x + 480, 80, '⛩️ SETOR 1: TÓQUIO, JAPÃO (CYBER NEO-TOKYO) ⛩️', '#00d9ff', 15);
+    }
+    if (!this.announcedRegions['brazil'] && leadPlayerX > 1300) {
+      this.announcedRegions['brazil'] = true;
+      this.addFloatingText(this.camera.x + 480, 80, '🌴 SETOR 2: AMAZÔNIA & RUÍNAS TROPICAIS, BRASIL 🌴', '#52b788', 15);
+      audio.announce("SECTOR TWO BRAZIL");
+    }
+    if (!this.announcedRegions['europe'] && leadPlayerX > 2500) {
+      this.announcedRegions['europe'] = true;
+      this.addFloatingText(this.camera.x + 480, 80, '🏰 SETOR 3: PARIS & CASTELO MEDIEVAL, FRANÇA 🏰', '#ffaa00', 15);
+      audio.announce("SECTOR THREE EUROPE");
+    }
+    if (!this.announcedRegions['egypt'] && leadPlayerX > 3700) {
+      this.announcedRegions['egypt'] = true;
+      this.addFloatingText(this.camera.x + 480, 80, '🏜️ ARENA FINAL: PIRÂMIDES DE GIZÉ & ESFINGE, EGITO 🏜️', '#ffcc00', 16);
+      audio.announce("FINAL ARENA EGYPT DETECTED");
+    }
+
     this.map.enemySpawners.forEach(spawner => {
-      if (!spawner.spawned && this.player.x > spawner.triggerX) {
+      if (!spawner.spawned && leadPlayerX > spawner.triggerX) {
         spawner.spawned = true;
-        this.enemies.push(new Enemy(spawner.x, spawner.y, spawner.type));
+        const b = spawner.biome || this.getBiomeAt(spawner.x);
+        const enemy = new Enemy(spawner.x, spawner.y, spawner.type, b);
+        enemy.biome = spawner.biome; // Marcar bioma para sistema de portões
+        this.enemies.push(enemy);
+        
+        // Ativar portão do bioma quando primeiro inimigo aparecer
+        if (spawner.biome && this.biomeGates[spawner.biome]) {
+          this.biomeGates[spawner.biome].active = true;
+        }
       }
     });
 
     // Atualizar Inimigos
-    this.enemies = this.enemies.filter(e => e.hp > 0);
+    this.enemies = this.enemies.filter(e => {
+      if (e.hp <= 0) {
+        // Contar morte do inimigo para o portão do bioma
+        if (e.biome && this.biomeGates[e.biome] && !this.biomeGates[e.biome].cleared) {
+          this.biomeGates[e.biome].enemiesKilled++;
+          
+          // Verificar se todos os inimigos do bioma foram mortos
+          const gate = this.biomeGates[e.biome];
+          if (gate.enemiesKilled >= gate.enemiesRequired && gate.active) {
+            gate.cleared = true;
+            gate.active = false;
+            audio.announce(`${e.biome.toUpperCase()} CLEARED!`);
+            this.addFloatingText(gate.x, 200, `🎯 ${e.biome.toUpperCase()} ZONE CLEARED! 🎯`, '#00ff00', 16);
+            this.triggerScreenShake(8, 0.4);
+          }
+        }
+        return false;
+      }
+      return true;
+    });
     this.enemies.forEach(e => {
-      e.update(dt, this.player, this);
+      // Persegue o jogador mais próximo
+      const targetP = this.getClosestPlayer(e.x, e.y);
+      e.update(dt, targetP, this);
     });
 
-    // 4. Checar Spawn do Chefão (Goliath Boss)
-    if (!this.boss && this.map.bossSpawn && this.player.x > this.map.bossSpawn.triggerX) {
+    // 4. Checar Spawn do Chefão (MechaGodzilla Titan Boss)
+    if (!this.boss && this.map.bossSpawn && leadPlayerX > this.map.bossSpawn.triggerX) {
       this.boss = new Boss(this.map.bossSpawn.x, this.map.bossSpawn.y);
       audio.playBossWarning();
+      audio.playMechaRoar();
+      audio.announce("WARNING! MECHAGODZILLA DETECTED");
       this.bossHud.style.display = 'flex';
-      this.addFloatingText(this.boss.x, this.boss.y - 30, 'WARNING! GOLIATH MECHATANK!', '#ff0033', 14);
+      this.addFloatingText(this.boss.x, this.boss.y - 30, '⚠️ WARNING! MECHAGODZILLA APEX TITAN! ⚠️', '#ff0033', 15);
     }
 
     if (this.boss) {
-      this.boss.update(dt, this.player, this);
+      const targetP = this.getClosestPlayer(this.boss.x, this.boss.y);
+      this.boss.update(dt, targetP, this);
+    }
+
+    // A cinemática é atualizada pelo motor, não por timers soltos: assim as
+    // asas, a carcaça carregada e o mergulho respeitam cada frame do jogo.
+    if (this.dragon && this.dragon.state !== 'DONE') {
+      this.dragon.update(dt, this);
     }
 
     // 5. Atualizar Reféns POW
     this.pows.forEach(pow => {
-      pow.update(dt, this.player, this);
+      const targetP = this.getClosestPlayer(pow.x, pow.y);
+      pow.update(dt, targetP, this);
     });
 
     // 6. Atualizar Projéteis e Checar Colisões
@@ -416,6 +580,8 @@ class Game {
 
     // 8. Atualizar Partículas (Fumaça, Cartuchos, Faíscas)
     this.updateParticles(dt);
+    this.updateExecutionEffects(dt);
+    this.updateLightningEffects(dt);
 
     // 9. Atualizar Textos Flutuantes
     this.floatingTexts.forEach(t => {
@@ -424,14 +590,81 @@ class Game {
     });
     this.floatingTexts = this.floatingTexts.filter(t => t.alpha > 0);
 
-    // 10. Coleta de Itens Pickups
+    // 10. Coleta de Itens Pickups por Todos os Jogadores
     this.checkPickupCollisions();
 
     // 11. Atualizar Câmera e Screen Shake
     this.updateCamera(dt);
 
-    // 12. Atualizar HUD
+    // 12. Atualizar HUD de Ambos os Jogadores
     this.updateHUD();
+    
+    // 13. Sistema de Portões - Bloquear jogador se não matou todos os inimigos!
+    this.updateBiomeGates();
+  }
+
+  getClosestPlayer(x, y) {
+    // Garantir que sempre retorna um player válido
+    if (!this.players || this.players.length === 0) {
+      return this.player || { x: x, y: y, width: 40, height: 40, isDead: true };
+    }
+    
+    const activePlayers = this.players.filter(p => p && !p.isDead);
+    if (activePlayers.length === 0) {
+      // Se todos estão mortos, retorna o primeiro player mesmo assim
+      return this.players[0] || this.player || { x: x, y: y, width: 40, height: 40, isDead: true };
+    }
+    
+    let closest = activePlayers[0];
+    let minDist = Infinity;
+    activePlayers.forEach(p => {
+      const d = Math.hypot((p.x + p.width / 2) - x, (p.y + p.height / 2) - y);
+      if (d < minDist) {
+        minDist = d;
+        closest = p;
+      }
+    });
+    return closest;
+  }
+
+  // SISTEMA DE PORTÕES/BARREIRAS POR BIOMA
+  updateBiomeGates() {
+    // Verificar cada portão ativo
+    Object.keys(this.biomeGates).forEach(biome => {
+      const gate = this.biomeGates[biome];
+      
+      if (gate.active && !gate.cleared) {
+        // Bloquear todos os jogadores neste portão!
+        this.players.forEach(p => {
+          if (p && !p.isDead) {
+            // Jogador tentando passar do portão antes de matar todos
+            if (p.x > gate.x) {
+              p.x = gate.x; // Parede invisível
+              p.vx = Math.min(0, p.vx); // Não deixa ir para frente
+              
+              // Aviso visual
+              if (Math.random() < 0.05) {
+                this.addFloatingText(gate.x + 50, 250, `⚠️ CLEAR ALL ENEMIES! ${gate.enemiesKilled}/${gate.enemiesRequired} ⚠️`, '#ff3300', 12);
+              }
+            }
+          }
+        });
+      }
+    });
+  }
+
+  getBiomeAt(x) {
+    if (x > 3700) return 'egypt';
+    if (x > 2500) return 'europe';
+    if (x > 1250) return 'brazil';
+    return 'tokyo';
+  }
+
+  checkAllPlayersDead() {
+    const anyAlive = this.players.some(p => p.lives >= 0 || !p.isDead);
+    if (!anyAlive) {
+      this.gameOver();
+    }
   }
 
   updateProjectiles(dt) {
@@ -510,14 +743,23 @@ class Game {
         }
 
       } else {
-        // Projétil Inimigo contra o Jogador ou Tanque Slug
-        const target = (this.player.inSlug && this.player.slugRef) ? this.player.slugRef : this.player;
-        if (p.x > target.x && p.x < target.x + target.width && p.y > target.y && p.y < target.y + target.height) {
-          target.takeDamage(p.damage, this);
-          if (p.type === 'rocket' || p.type === 'grenade') {
-            this.spawnExplosion(p.x, p.y, 40);
-            audio.playExplosion(true);
+        // Projétil Inimigo contra TODOS os Jogadores ou Tanque Slug
+        let hitAny = false;
+        for (let pi = 0; pi < this.players.length; pi++) {
+          const pl = this.players[pi];
+          if (pl.isDead) continue;
+          const target = (pl.inSlug && pl.slugRef) ? pl.slugRef : pl;
+          if (p.x > target.x && p.x < target.x + target.width && p.y > target.y && p.y < target.y + target.height) {
+            target.takeDamage(p.damage, this);
+            if (p.type === 'rocket' || p.type === 'grenade') {
+              this.spawnExplosion(p.x, p.y, 40);
+              audio.playExplosion(true);
+            }
+            hitAny = true;
+            break;
           }
+        }
+        if (hitAny) {
           this.projectiles.splice(i, 1);
         }
       }
@@ -527,23 +769,28 @@ class Game {
   checkPickupCollisions() {
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const item = this.pickups[i];
-      const dist = Math.hypot((this.player.x + this.player.width / 2) - (item.x + 14), (this.player.y + this.player.height / 2) - (item.y + 14));
+      for (let pIdx = 0; pIdx < this.players.length; pIdx++) {
+        const p = this.players[pIdx];
+        if (p.isDead) continue;
+        const dist = Math.hypot((p.x + p.width / 2) - (item.x + 14), (p.y + p.height / 2) - (item.y + 14));
 
-      if (dist < 34) {
-        audio.playItemPickup();
+        if (dist < 36) {
+          audio.playItemPickup();
 
-        if (item.type === 'FOOD') {
-          this.player.score += 500;
-          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
-          this.addFloatingText(item.x, item.y - 15, '+500 FOOD!', '#00ff66');
-        } else if (item.type === 'BOMB') {
-          this.player.grenades += 10;
-          this.addFloatingText(item.x, item.y - 15, '+10 BOMBS!', '#ff3300');
-        } else {
-          this.player.equipWeapon(item.type, item.ammo, this);
+          if (item.type === 'FOOD') {
+            p.score += 500;
+            p.hp = Math.min(p.maxHp, p.hp + 25);
+            this.addFloatingText(item.x, item.y - 15, '+500 FOOD!', '#00ff66');
+          } else if (item.type === 'BOMB') {
+            p.grenades += 10;
+            this.addFloatingText(item.x, item.y - 15, '+10 BOMBS!', '#ff3300');
+          } else {
+            p.equipWeapon(item.type, item.ammo, this);
+          }
+
+          this.pickups.splice(i, 1);
+          break;
         }
-
-        this.pickups.splice(i, 1);
       }
     }
   }
@@ -581,16 +828,77 @@ class Game {
     }
   }
 
-  updateCamera(dt) {
-    const targetFocus = (this.player.inSlug && this.player.slugRef) ? this.player.slugRef : this.player;
-    let targetX = targetFocus.x - this.canvas.width * 0.35;
+  updateExecutionEffects(dt) {
+    for (let i = this.executionEffects.length - 1; i >= 0; i--) {
+      const effect = this.executionEffects[i];
+      effect.life -= dt;
+      effect.split = Math.min(28, effect.split + 64 * dt);
+      effect.rise += 36 * dt;
+      if (effect.life <= 0) this.executionEffects.splice(i, 1);
+    }
+  }
 
-    // Se o Chefão estiver ativado, travar a câmera na arena
+  updateFinaleCinematic(dt) {
+    if (this.dragon && this.dragon.state !== 'DONE') this.dragon.update(dt, this);
+    this.cinematicFlash = Math.max(0, this.cinematicFlash - dt * 1.8);
+
+    // A carcaça, explosões e raios continuam vivos durante a cena, mas os
+    // jogadores ficam seguros e não há novas colisões de combate.
+    this.players.forEach(player => {
+      player.isInvulnerable = true;
+      player.vx = 0;
+    });
+    this.explosions.forEach(explosion => { explosion.life -= dt; });
+    this.explosions = this.explosions.filter(explosion => explosion.life > 0);
+    this.updateParticles(dt);
+    this.updateExecutionEffects(dt);
+    this.updateLightningEffects(dt);
+    this.floatingTexts.forEach(text => {
+      text.y -= 24 * dt;
+      text.alpha -= 1.1 * dt;
+    });
+    this.floatingTexts = this.floatingTexts.filter(text => text.alpha > 0);
+
     if (this.boss) {
-      const arenaMinX = this.map.bossSpawn.triggerX;
-      targetX = Math.max(arenaMinX, Math.min(this.map.width - this.canvas.width, targetX));
+      const targetCameraX = Math.max(0, Math.min(
+        this.map.width - this.canvas.width,
+        this.boss.x + this.boss.width / 2 - this.canvas.width * 0.52
+      ));
+      this.camera.x += (targetCameraX - this.camera.x) * Math.min(1, dt * 4);
+      this.camera.y = 0;
+    }
+    this.updateHUD();
+  }
+
+  updateLightningEffects(dt) {
+    for (let i = this.lightningEffects.length - 1; i >= 0; i--) {
+      const bolt = this.lightningEffects[i];
+      bolt.life -= dt;
+      if (bolt.life <= 0) this.lightningEffects.splice(i, 1);
+    }
+  }
+
+  updateCamera(dt) {
+    const activeTargets = this.players
+      .filter(p => !p.isDead)
+      .map(p => (p.inSlug && p.slugRef) ? p.slugRef : p);
+    
+    let avgX = 0;
+    if (activeTargets.length > 0) {
+      avgX = activeTargets.reduce((sum, t) => sum + t.x, 0) / activeTargets.length;
+    } else if (this.player) {
+      avgX = this.player.x;
+    }
+
+    let targetX = avgX - this.canvas.width * 0.35;
+    const maxCamX = Math.max(0, this.map.width - this.canvas.width);
+
+    // Se o Chefão estiver ativado, travar a câmera suavemente na arena
+    if (this.boss) {
+      const arenaMinX = Math.min(maxCamX, (this.map.bossSpawn ? this.map.bossSpawn.triggerX - 80 : 3000));
+      targetX = Math.max(arenaMinX, Math.min(maxCamX, targetX));
     } else {
-      targetX = Math.max(0, Math.min(this.map.width - this.canvas.width, targetX));
+      targetX = Math.max(0, Math.min(maxCamX, targetX));
     }
 
     // Interpolação suave
@@ -713,6 +1021,130 @@ class Game {
     }
   }
 
+  addExecutionSplit(enemy, direction) {
+    this.executionEffects.push({
+      x: enemy.x + enemy.width / 2,
+      y: enemy.y + enemy.height / 2,
+      width: enemy.width,
+      height: enemy.height,
+      biome: enemy.biome || 'tokyo',
+      direction,
+      split: 0,
+      rise: 0,
+      life: 0.6,
+      maxLife: 0.6
+    });
+  }
+
+  startDragonFinale(boss) {
+    if (this.dragon || !boss) return;
+    this.cinematicActive = true;
+    this.projectiles = [];
+    this.players.forEach(player => {
+      player.isInvulnerable = true;
+      player.vx = 0;
+    });
+    this.dragon = new DragonCinematic(boss, this);
+  }
+
+  triggerDragonClawStrike(boss) {
+    if (!boss) return;
+    const x = boss.x + boss.width * 0.62;
+    const y = boss.y + boss.height * 0.42;
+    this.triggerScreenShake(21, 0.48);
+    this.cinematicFlash = Math.max(this.cinematicFlash, 0.42);
+    this.cinematicFlashColor = '#fff0a8';
+    audio.playExplosion(true);
+    audio.playMechaRoar();
+    this.addFloatingText(x, y - 110, '💥 RASANTE DAS TRÊS CABEÇAS! 💥', '#ffe066', 15);
+
+    // A garra deixa uma trajetória violenta: faíscas, impacto e arcos de
+    // eletricidade acompanham a queda da carcaça, sem alterar o visual dela.
+    for (let i = 0; i < 7; i++) {
+      const angle = -2.7 + i * 0.24;
+      const reach = 90 + i * 20;
+      const ex = x + Math.cos(angle) * reach;
+      const ey = y + Math.sin(angle) * reach * 0.52;
+      this.spawnExplosion(ex, ey, 24 + Math.random() * 20);
+      this.addLightningBolt(x, y - 28, ex, ey);
+    }
+    for (let i = 0; i < 32; i++) {
+      this.particles.push({
+        type: 'spark', x, y,
+        vx: (Math.random() - 0.5) * 22,
+        vy: -Math.random() * 14 + (Math.random() - 0.5) * 6,
+        life: 0.52, maxLife: 0.52
+      });
+    }
+    boss.cinematicTilt = (boss.facing || -1) * 0.3;
+    boss.cinematicOpacity = 0.72;
+  }
+
+  triggerDragonAftershock(x, y, pulse) {
+    const radius = 170 + pulse * 85;
+    this.triggerScreenShake(14 + pulse * 3, 0.3);
+    this.cinematicFlash = Math.max(this.cinematicFlash, 0.2 + pulse * 0.035);
+    this.cinematicFlashColor = '#9ef4ff';
+    audio.playExplosion(false);
+
+    for (let i = 0; i < 5 + pulse; i++) {
+      const angle = (Math.PI * 2 * i) / (5 + pulse) + pulse * 0.38;
+      const ex = x + Math.cos(angle) * radius;
+      const ey = y + Math.sin(angle) * radius * 0.46;
+      this.spawnExplosion(ex, ey, 22 + pulse * 7);
+      this.addLightningBolt(x, y - 38, ex, ey);
+    }
+  }
+
+  triggerDragonImpact(x, y, radius) {
+    this.triggerScreenShake(30, 0.9);
+    this.cinematicFlash = 0.72;
+    this.cinematicFlashColor = '#d7fbff';
+    audio.playExplosion(true);
+    audio.playMechaRoar();
+    this.addFloatingText(this.camera.x + this.canvas.width / 2, 105, '⚡ DRAGON STORM — APOCALYPSE AOE! ⚡', '#f8e16c', 16);
+
+    // O impacto limpa qualquer ameaça ainda ativa na arena, mas não pune os
+    // jogadores durante a cena de vitória.
+    this.enemies.forEach(enemy => {
+      if (Math.hypot((enemy.x + enemy.width / 2) - x, (enemy.y + enemy.height / 2) - y) <= radius) {
+        enemy.takeDamage(9999, 0, this);
+      }
+    });
+    this.projectiles = this.projectiles.filter(projectile => projectile.isPlayer);
+
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const distance = 90 + Math.random() * radius * 0.6;
+      const ex = x + Math.cos(angle) * distance;
+      const ey = y + Math.sin(angle) * distance * 0.42;
+      this.spawnExplosion(ex, ey, 35 + Math.random() * 35);
+      this.addLightningBolt(x, y - 45, ex, ey);
+    }
+    for (let i = 0; i < 38; i++) {
+      this.particles.push({
+        type: 'spark', x, y,
+        vx: (Math.random() - 0.5) * 24,
+        vy: (Math.random() - 0.5) * 20,
+        life: 0.65, maxLife: 0.65
+      });
+    }
+  }
+
+  addLightningBolt(startX, startY, endX, endY) {
+    const points = [{ x: startX, y: startY }];
+    const segments = 7;
+    for (let i = 1; i < segments; i++) {
+      const progress = i / segments;
+      points.push({
+        x: startX + (endX - startX) * progress + (Math.random() - 0.5) * 55,
+        y: startY + (endY - startY) * progress + (Math.random() - 0.5) * 38
+      });
+    }
+    points.push({ x: endX, y: endY });
+    this.lightningEffects.push({ points, life: 0.48, maxLife: 0.48 });
+  }
+
   addFloatingText(x, y, text, color = '#ffee00', size = 11) {
     this.floatingTexts.push({ x, y, text, color, size, alpha: 1.0 });
   }
@@ -735,35 +1167,50 @@ class Game {
 
   // --- ATUALIZAÇÃO DO HUD EM TEMPO REAL ---
   updateHUD() {
-    if (!this.player) return;
+    // Player 1 HUD
+    const p1 = this.players[0] || this.player;
+    if (p1) {
+      const hpPct1 = Math.max(0, Math.min(100, (p1.hp / p1.maxHp) * 100));
+      this.hudHpFill.style.width = `${hpPct1}%`;
+      this.hudScore.textContent = String(p1.score).padStart(6, '0');
+      this.hudWeaponName.textContent = p1.weapon;
+      this.hudWeaponAmmo.textContent = p1.ammo === Infinity ? '∞' : p1.ammo;
+      this.hudWeaponIcon.textContent = p1.weapon === 'AXE' ? '🪓' : (p1.weapon === 'BOW' ? '🏹' : p1.weapon[0]);
+      this.hudGrenades.textContent = `x${p1.grenades}`;
+      this.hudLivesContainer.innerHTML = '';
+      for (let i = 0; i < Math.max(0, p1.lives); i++) {
+        const lifeIcon = document.createElement('span');
+        lifeIcon.className = 'life-icon';
+        this.hudLivesContainer.appendChild(lifeIcon);
+      }
+    }
 
-    // Barra de Vida do Jogador
-    const hpPct = Math.max(0, Math.min(100, (this.player.hp / this.player.maxHp) * 100));
-    this.hudHpFill.style.width = `${hpPct}%`;
-
-    // Pontuação
-    this.hudScore.textContent = String(this.player.score).padStart(6, '0');
-
-    // Arma Atual
-    this.hudWeaponName.textContent = this.player.weapon;
-    this.hudWeaponAmmo.textContent = this.player.ammo === Infinity ? '∞' : this.player.ammo;
-    this.hudWeaponIcon.textContent = this.player.weapon[0];
-
-    // Granadas
-    this.hudGrenades.textContent = `x${this.player.grenades}`;
-
-    // Vidas
-    this.hudLivesContainer.innerHTML = '';
-    for (let i = 0; i < Math.max(0, this.player.lives); i++) {
-      const lifeIcon = document.createElement('span');
-      lifeIcon.className = 'life-icon';
-      this.hudLivesContainer.appendChild(lifeIcon);
+    // Player 2 HUD (se ativo em modo 2P)
+    if (this.gameMode === '2P' && this.players[1]) {
+      const p2 = this.players[1];
+      if (this.hudP2HpFill) {
+        const hpPct2 = Math.max(0, Math.min(100, (p2.hp / p2.maxHp) * 100));
+        this.hudP2HpFill.style.width = `${hpPct2}%`;
+      }
+      if (this.hudP2WeaponName) this.hudP2WeaponName.textContent = p2.weapon;
+      if (this.hudP2WeaponAmmo) this.hudP2WeaponAmmo.textContent = p2.ammo === Infinity ? '∞' : p2.ammo;
+      if (this.hudP2WeaponIcon) this.hudP2WeaponIcon.textContent = p2.weapon === 'AXE' ? '🪓' : (p2.weapon === 'BOW' ? '🏹' : p2.weapon[0]);
+      if (this.hudP2Grenades) this.hudP2Grenades.textContent = `x${p2.grenades}`;
+      if (this.hudP2LivesContainer) {
+        this.hudP2LivesContainer.innerHTML = '';
+        for (let i = 0; i < Math.max(0, p2.lives); i++) {
+          const lifeIcon = document.createElement('span');
+          lifeIcon.className = 'life-icon';
+          this.hudP2LivesContainer.appendChild(lifeIcon);
+        }
+      }
     }
 
     // Tanque Slug HUD
-    if (this.player.inSlug && this.player.slugRef) {
+    const pInSlug = this.players.find(p => p.inSlug && p.slugRef);
+    if (pInSlug && pInSlug.slugRef) {
       this.slugHud.style.display = 'flex';
-      this.slugCannonCount.textContent = `HP: ${this.player.slugRef.hp} | CANNON: x${this.player.slugRef.cannons}`;
+      this.slugCannonCount.textContent = `HP: ${pInSlug.slugRef.hp} | CANNON: x${pInSlug.slugRef.cannons}`;
     } else {
       this.slugHud.style.display = 'none';
     }
@@ -772,6 +1219,10 @@ class Game {
     if (this.boss && !this.boss.isDead) {
       const bossHpPct = Math.max(0, Math.min(100, (this.boss.hp / this.boss.maxHp) * 100));
       this.bossHpFill.style.width = `${bossHpPct}%`;
+      if (this.bossPhase) {
+        const phaseLabels = ['SISTEMAS ONLINE', 'PROTOCOLO DE CAÇA', 'NÚCLEO EM FUSÃO'];
+        this.bossPhase.textContent = `FASE ${this.boss.phase} · ${phaseLabels[this.boss.phase - 1]}`;
+      }
     } else {
       this.bossHud.style.display = 'none';
     }
@@ -781,7 +1232,8 @@ class Game {
   gameOver() {
     this.state = 'GAMEOVER';
     audio.announce("GAME OVER");
-    document.getElementById('final-score-gameover').textContent = this.player.score;
+    const totalScore = this.players.reduce((sum, p) => sum + (p.score || 0), 0);
+    document.getElementById('final-score-gameover').textContent = totalScore;
     document.getElementById('gameover-screen').style.display = 'flex';
   }
 
@@ -789,7 +1241,8 @@ class Game {
     this.state = 'VICTORY';
     audio.playMissionComplete();
     audio.announce("MISSION ALL OVER");
-    document.getElementById('final-score-victory').textContent = this.player.score;
+    const totalScore = this.players.reduce((sum, p) => sum + (p.score || 0), 0);
+    document.getElementById('final-score-victory').textContent = totalScore;
     document.getElementById('victory-screen').style.display = 'flex';
   }
 
@@ -800,6 +1253,7 @@ class Game {
     if (this.state === 'START') {
       // Desenhar fundo arcade animado
       renderer.drawParallaxBackground(this.ctx, { x: this.time * 20, y: 0 }, this.canvas.width, this.canvas.height, 4000);
+      renderer.drawMenuEasterEggs(this.ctx, this.canvas.width, this.canvas.height, this.time);
       return;
     }
 
@@ -811,7 +1265,7 @@ class Game {
 
     // 3. Tanques Slug
     this.slugs.forEach(s => {
-      if (!s.destroyed) renderer.drawSlug(this.ctx, this.camera, s, (this.player && this.player.characterId) || this.selectedCharacter);
+      if (!s.destroyed) renderer.drawSlug(this.ctx, this.camera, s, (s.driverCharacterId || 'claudio'));
     });
 
     // 4. Reféns POW
@@ -824,15 +1278,25 @@ class Game {
       renderer.drawEnemy(this.ctx, this.camera, e);
     });
 
+    // Fragmentos temporários da execução do Claudio, exibidos mesmo depois de
+    // o inimigo já ter sido removido da lista de entidades.
+    renderer.drawExecutionEffects(this.ctx, this.camera, this.executionEffects);
+
     // 6. Chefão Goliath
     if (this.boss) {
       renderer.drawBoss(this.ctx, this.camera, this.boss);
     }
 
-    // 7. Jogador (se não estiver dentro do tanque)
-    if (this.player && !this.player.inSlug && !this.player.isDead) {
-      renderer.drawPlayer(this.ctx, this.camera, this.player);
+    if (this.dragon && this.dragon.state !== 'DONE') {
+      renderer.drawDragon(this.ctx, this.camera, this.dragon);
     }
+
+    // 7. Todos os Jogadores Ativos (se não estiverem dentro do tanque)
+    this.players.forEach(p => {
+      if (!p.inSlug && !p.isDead) {
+        renderer.drawPlayer(this.ctx, this.camera, p);
+      }
+    });
 
     // 8. Itens Coletáveis Pickups
     renderer.drawPickups(this.ctx, this.camera, this.pickups);
@@ -843,8 +1307,12 @@ class Game {
     // 10. Partículas
     renderer.drawParticles(this.ctx, this.camera, this.particles);
 
+    renderer.drawLightningEffects(this.ctx, this.camera, this.lightningEffects);
+
     // 11. Explosões
     renderer.drawExplosions(this.ctx, this.camera, this.explosions);
+
+    renderer.drawCinematicFlash(this.ctx, this.cinematicFlash, this.cinematicFlashColor);
 
     // 12. Textos Flutuantes
     renderer.drawFloatingTexts(this.ctx, this.camera, this.floatingTexts);

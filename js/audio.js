@@ -276,6 +276,74 @@ class SoundSystem {
     this.playNoise(0.15, 0.7, 1800, 'highpass');
   }
 
+  playBowShot() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.12);
+
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.12);
+
+    this.playNoise(0.08, 0.4, 3000, 'highpass');
+  }
+
+  playArrowHit() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(100, now + 0.08);
+
+    gain.gain.setValueAtTime(0.6, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.08);
+
+    this.playNoise(0.06, 0.6, 2200, 'bandpass');
+  }
+
+  playBowSpecial() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    for (let i = 0; i < 3; i++) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const t = now + i * 0.05;
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(1000 + i * 300, t);
+      osc.frequency.exponentialRampToValueAtTime(300, t + 0.15);
+
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    }
+    this.playNoise(0.25, 0.6, 1500, 'highpass');
+  }
+
   playPitFall() {
     if (!this.ctx || this.isMuted) return;
     const now = this.ctx.currentTime;
@@ -294,6 +362,105 @@ class SoundSystem {
     gain.connect(this.sfxGain);
     osc.start(now);
     osc.stop(now + 0.45);
+  }
+
+  playMechaRoar() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    // Rugido Metálico de Kaiju com Modulação de Frequência e Ruído Distorcido
+    for (let i = 0; i < 3; i++) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const t = now + i * 0.08;
+
+      osc.type = i === 0 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(280 - i * 50, t);
+      osc.frequency.exponentialRampToValueAtTime(70, t + 0.7);
+
+      gain.gain.setValueAtTime(0.7, t);
+      gain.gain.linearRampToValueAtTime(0.01, t + 0.7);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 0.7);
+    }
+    this.playNoise(0.65, 0.8, 400, 'lowpass');
+    this.playNoise(0.4, 0.5, 1200, 'bandpass');
+  }
+
+  playProtonBeam() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    // Carga inicial do feixe
+    const oscCharge = this.ctx.createOscillator();
+    const gainCharge = this.ctx.createGain();
+    oscCharge.type = 'sine';
+    oscCharge.frequency.setValueAtTime(300, now);
+    oscCharge.frequency.exponentialRampToValueAtTime(1400, now + 0.25);
+    gainCharge.gain.setValueAtTime(0.4, now);
+    gainCharge.gain.linearRampToValueAtTime(0.01, now + 0.25);
+    oscCharge.connect(gainCharge);
+    gainCharge.connect(this.sfxGain);
+    oscCharge.start(now);
+    oscCharge.stop(now + 0.25);
+
+    // Disparo contínuo do Laser Vermelho Atômico
+    const oscBeam = this.ctx.createOscillator();
+    const gainBeam = this.ctx.createGain();
+    oscBeam.type = 'sawtooth';
+    oscBeam.frequency.setValueAtTime(440, now + 0.2);
+    oscBeam.frequency.linearRampToValueAtTime(320, now + 1.2);
+    gainBeam.gain.setValueAtTime(0.7, now + 0.2);
+    gainBeam.gain.linearRampToValueAtTime(0.01, now + 1.2);
+    oscBeam.connect(gainBeam);
+    gainBeam.connect(this.sfxGain);
+    oscBeam.start(now + 0.2);
+    oscBeam.stop(now + 1.2);
+
+    this.playNoise(0.9, 0.7, 1800, 'bandpass');
+  }
+
+  playMechaStep() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    // Impacto sísmico grave de pata mecânica gigante
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, now);
+    osc.frequency.exponentialRampToValueAtTime(25, now + 0.18);
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.18);
+
+    // Ruído de atrito mecânico e poeira
+    this.playNoise(0.12, 0.35, 300, 'lowpass');
+  }
+
+  playLaserCharge() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    // Tom agudo ascendente de conversão de energia quântica
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(1600, now + 0.55);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0.4, now + 0.45);
+    gain.gain.linearRampToValueAtTime(0.01, now + 0.55);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.55);
   }
 
   playExplosion(heavy = false) {

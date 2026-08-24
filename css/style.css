@@ -330,6 +330,13 @@ body {
   animation: pulse-red 1s infinite alternate;
 }
 
+.boss-phase {
+  color: #ffbb00;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 8px rgba(255, 187, 0, 0.8);
+}
+
 @keyframes pulse-red {
   from { opacity: 0.8; }
   to { opacity: 1; transform: scale(1.02); }
@@ -382,15 +389,40 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(4, 6, 12, 0.88);
+  background: rgba(4, 6, 12, 0.92);
   backdrop-filter: blur(6px);
   z-index: 50;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   text-align: center;
-  padding: 24px;
+  padding: 20px 24px 40px 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* A abertura deixa o cenário do canvas respirar: os easter eggs ficam vivos
+   ao fundo, enquanto o painel continua confortável para leitura. */
+#start-screen {
+  background: linear-gradient(180deg, rgba(4, 6, 12, 0.72), rgba(4, 6, 12, 0.84));
+  backdrop-filter: blur(2px);
+}
+
+.overlay-screen::-webkit-scrollbar {
+  width: 10px;
+}
+
+.overlay-screen::-webkit-scrollbar-track {
+  background: rgba(10, 15, 25, 0.9);
+  border-radius: 5px;
+}
+
+.overlay-screen::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--neon-blue), var(--neon-yellow));
+  border-radius: 5px;
+  box-shadow: 0 0 10px var(--neon-yellow);
 }
 
 .game-title-logo {
@@ -422,7 +454,7 @@ body {
 /* --- SEÇÃO DE SELEÇÃO DE PERSONAGENS --- */
 .character-select-section {
   width: 100%;
-  max-width: 900px;
+  max-width: 620px;
   margin-bottom: 16px;
 }
 
@@ -449,7 +481,7 @@ body {
 
 .character-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
 }
@@ -516,9 +548,9 @@ body {
 }
 
 .char-avatar-box {
-  width: 64px;
-  height: 64px;
-  border-radius: 6px;
+  width: 72px;
+  height: 80px;
+  border-radius: 8px;
   border: 2px solid #3d4e68;
   overflow: hidden;
   background: #090c12;
@@ -527,18 +559,19 @@ body {
   justify-content: center;
   margin-bottom: 8px;
   position: relative;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.9);
 }
 
 .char-card.active .char-avatar-box {
   border-color: var(--neon-yellow);
-  box-shadow: 0 0 12px rgba(255, 238, 0, 0.5);
+  box-shadow: 0 0 15px rgba(255, 238, 0, 0.6);
 }
 
 .char-photo-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top center;
   display: block;
 }
 
@@ -751,6 +784,9 @@ body {
   transition: all 0.1s ease;
   pointer-events: all;
   letter-spacing: 1px;
+  margin-top: 14px;
+  margin-bottom: 28px;
+  flex-shrink: 0;
 }
 
 .btn-arcade:hover {
